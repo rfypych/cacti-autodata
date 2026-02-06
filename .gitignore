@@ -74,3 +74,9 @@ geckodriver*
 
 # Logs
 *.log
+
+# Chrome profile (contains login session)
+chrome_profile/
+
+# User settings (local preferences)
+user_settings.json

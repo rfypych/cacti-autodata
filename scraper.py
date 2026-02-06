@@ -39,14 +39,18 @@ class CactiScraper:
         """Update progress via callback"""
         self.progress_callback(message, percentage)
     
-    def start_browser(self, attach_to_existing: bool = False, debug_port: int = 9222):
+    def start_browser(self, attach_to_existing: bool = False, debug_port: int = 9222, 
+                       use_system_profile: bool = True):
         """
         Mulai browser Chrome
         
         Args:
             attach_to_existing: Jika True, coba connect ke Chrome yang sudah berjalan
             debug_port: Port untuk remote debugging (default: 9222)
+            use_system_profile: Jika True, gunakan Chrome profile sistem (yang sudah login)
         """
+        import os
+        
         chrome_options = Options()
         
         # Try to attach to existing Chrome session
@@ -60,12 +64,25 @@ class CactiScraper:
                 return
             except Exception as e:
                 self._update_progress(f"⚠ Tidak bisa connect ke Chrome existing: {str(e)}")
-                self._update_progress("Memulai browser Chrome baru...", 5)
+                self._update_progress("Mencoba pakai profile Chrome sistem...", 5)
         else:
             self._update_progress("Memulai browser Chrome...", 5)
         
         # Start new Chrome session
         chrome_options = Options()  # Reset options
+        
+        # Use system Chrome profile (the one that's already logged into Cacti)
+        if use_system_profile:
+            # Windows Chrome profile location
+            user_home = os.path.expanduser("~")
+            system_profile = os.path.join(user_home, "AppData", "Local", "Google", "Chrome", "User Data")
+            
+            if os.path.exists(system_profile):
+                self._update_progress(f"📁 Menggunakan Chrome profile sistem (session Cacti tersimpan)")
+                chrome_options.add_argument(f"--user-data-dir={system_profile}")
+                chrome_options.add_argument("--profile-directory=Default")
+            else:
+                self._update_progress(f"⚠ Profile sistem tidak ditemukan, menggunakan profile baru")
         
         if not config.SHOW_BROWSER:
             chrome_options.add_argument("--headless=new")  # New headless mode
@@ -74,6 +91,10 @@ class CactiScraper:
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
+        
+        # Disable automation detection
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
         
         # Selenium 4.6+ has built-in driver manager, no need for webdriver-manager
         self.driver = webdriver.Chrome(options=chrome_options)
