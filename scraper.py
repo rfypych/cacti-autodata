@@ -39,15 +39,13 @@ class CactiScraper:
         """Update progress via callback"""
         self.progress_callback(message, percentage)
     
-    def start_browser(self, attach_to_existing: bool = False, debug_port: int = 9222, 
-                       use_system_profile: bool = True):
+    def start_browser(self, attach_to_existing: bool = False, debug_port: int = 9222):
         """
         Mulai browser Chrome
         
         Args:
             attach_to_existing: Jika True, coba connect ke Chrome yang sudah berjalan
             debug_port: Port untuk remote debugging (default: 9222)
-            use_system_profile: Jika True, gunakan Chrome profile sistem (yang sudah login)
         """
         import os
         
@@ -63,26 +61,19 @@ class CactiScraper:
                 self._update_progress("✓ Berhasil connect ke Chrome yang sudah terbuka!", 10)
                 return
             except Exception as e:
-                self._update_progress(f"⚠ Tidak bisa connect ke Chrome existing: {str(e)}")
-                self._update_progress("Mencoba pakai profile Chrome sistem...", 5)
+                self._update_progress(f"⚠ Tidak bisa connect ke Chrome existing")
+                self._update_progress("Memulai browser Chrome baru...", 5)
         else:
             self._update_progress("Memulai browser Chrome...", 5)
         
-        # Start new Chrome session
+        # Start new Chrome session with custom profile
         chrome_options = Options()  # Reset options
         
-        # Use system Chrome profile (the one that's already logged into Cacti)
-        if use_system_profile:
-            # Windows Chrome profile location
-            user_home = os.path.expanduser("~")
-            system_profile = os.path.join(user_home, "AppData", "Local", "Google", "Chrome", "User Data")
-            
-            if os.path.exists(system_profile):
-                self._update_progress(f"📁 Menggunakan Chrome profile sistem (session Cacti tersimpan)")
-                chrome_options.add_argument(f"--user-data-dir={system_profile}")
-                chrome_options.add_argument("--profile-directory=Default")
-            else:
-                self._update_progress(f"⚠ Profile sistem tidak ditemukan, menggunakan profile baru")
+        # Use a dedicated profile for this app
+        profile_dir = os.path.join(os.path.dirname(__file__), "chrome_profile")
+        if not os.path.exists(profile_dir):
+            os.makedirs(profile_dir)
+        chrome_options.add_argument(f"--user-data-dir={profile_dir}")
         
         if not config.SHOW_BROWSER:
             chrome_options.add_argument("--headless=new")  # New headless mode
@@ -96,12 +87,58 @@ class CactiScraper:
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         
-        # Selenium 4.6+ has built-in driver manager, no need for webdriver-manager
+        # Selenium 4.6+ has built-in driver manager
         self.driver = webdriver.Chrome(options=chrome_options)
         self.driver.set_page_load_timeout(config.PAGE_LOAD_TIMEOUT)
         self.attached_to_existing = False
         
+        # Load cookies if available
+        self._load_cookies()
+        
         self._update_progress("Browser siap!", 10)
+    
+    def _load_cookies(self):
+        """Load cookies from cacti_cookies.json if available"""
+        import os
+        import json
+        
+        cookies_file = os.path.join(os.path.dirname(__file__), "cacti_cookies.json")
+        
+        if not os.path.exists(cookies_file):
+            self._update_progress("ℹ Tidak ada cookies tersimpan (first run)")
+            return
+        
+        try:
+            # Navigate to the domain first (required for adding cookies)
+            self.driver.get(config.CACTI_URL)
+            
+            with open(cookies_file, 'r') as f:
+                cookies = json.load(f)
+            
+            for cookie in cookies:
+                selenium_cookie = {
+                    "name": cookie["name"],
+                    "value": cookie["value"],
+                }
+                
+                # Add optional fields
+                if cookie.get("path"):
+                    selenium_cookie["path"] = cookie["path"]
+                if cookie.get("secure"):
+                    selenium_cookie["secure"] = True
+                
+                try:
+                    self.driver.add_cookie(selenium_cookie)
+                except:
+                    pass
+            
+            self._update_progress(f"🍪 {len(cookies)} cookies dimuat (session tersimpan)")
+            
+            # Refresh to apply cookies
+            self.driver.refresh()
+            
+        except Exception as e:
+            self._update_progress(f"⚠ Gagal load cookies: {str(e)}")
     
     def close_browser(self):
         """Tutup browser (skip jika attached to existing)"""
