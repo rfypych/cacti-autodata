@@ -1,6 +1,7 @@
 """
 Excel Writer Module
 Menulis data bandwidth ke file Excel yang sudah ada
+Dengan fitur skip baris yang sudah terisi
 """
 
 from datetime import datetime
@@ -68,6 +69,20 @@ class ExcelWriter:
         
         return None
     
+    def is_row_filled(self, sheet: Worksheet, row: int) -> bool:
+        """
+        Cek apakah baris sudah terisi data
+        
+        Args:
+            sheet: Worksheet object
+            row: Nomor baris
+            
+        Returns:
+            True jika sudah ada data di kolom Curent(IN)
+        """
+        cell_value = sheet.cell(row=row, column=config.EXCEL_COL_CURR_IN).value
+        return cell_value is not None and str(cell_value).strip() != ""
+    
     def find_row_by_date_time(self, sheet: Worksheet, target_date: datetime, 
                                target_hour: int, target_minute: int) -> Optional[int]:
         """
@@ -83,13 +98,11 @@ class ExcelWriter:
             Nomor baris (1-indexed) atau None jika tidak ditemukan
         """
         target_date_str = target_date.strftime(config.DATE_FORMAT_EXCEL)
-        target_time_str = f"{target_hour:02d}:{target_minute:02d}"
         
-        # Jika format waktu berbeda, sesuaikan
+        # Format waktu sesuai config (pakai titik: "09.00")
+        target_time_compare = f"{target_hour:02d}.{target_minute:02d}"
         if config.TIME_FORMAT_EXCEL:
             target_time_compare = datetime(2000, 1, 1, target_hour, target_minute).strftime(config.TIME_FORMAT_EXCEL)
-        else:
-            target_time_compare = target_time_str
         
         for row in range(config.EXCEL_DATA_START_ROW, sheet.max_row + 1):
             date_cell = sheet.cell(row=row, column=config.EXCEL_COL_TANGGAL).value
@@ -122,6 +135,11 @@ class ExcelWriter:
         # Handle time object
         if hasattr(cell_value, 'strftime'):
             return cell_value.strftime(config.TIME_FORMAT_EXCEL)
+        # Handle numeric time (e.g., 9.0 for 09.00)
+        if isinstance(cell_value, (int, float)):
+            hours = int(cell_value)
+            minutes = int((cell_value - hours) * 100)
+            return f"{hours:02d}.{minutes:02d}"
         return str(cell_value).strip()
     
     def write_data_to_row(self, sheet: Worksheet, row: int, data: Dict):
@@ -156,6 +174,7 @@ class ExcelWriter:
         """
         total = len(data_list)
         written = 0
+        skipped = 0
         not_found = 0
         
         for i, data in enumerate(data_list):
@@ -177,22 +196,30 @@ class ExcelWriter:
             )
             
             if row:
-                self.write_data_to_row(sheet, row, data)
-                written += 1
-                
                 date_str = data['date'].strftime(config.DATE_FORMAT_EXCEL)
-                time_str = f"{data['time_hour']:02d}:{data['time_minute']:02d}"
-                self._update_progress(
-                    f"✓ {sheet_name}: {date_str} {time_str} → baris {row}",
-                    86 + int((i / total) * 12)
-                )
+                time_str = f"{data['time_hour']:02d}.{data['time_minute']:02d}"
+                
+                # Cek apakah baris sudah terisi
+                if config.SKIP_FILLED_ROWS and self.is_row_filled(sheet, row):
+                    skipped += 1
+                    self._update_progress(
+                        f"⏭ Skip {sheet_name}: {date_str} {time_str} (sudah terisi)",
+                        86 + int((i / total) * 12)
+                    )
+                else:
+                    self.write_data_to_row(sheet, row, data)
+                    written += 1
+                    self._update_progress(
+                        f"✓ {sheet_name}: {date_str} {time_str} → baris {row}",
+                        86 + int((i / total) * 12)
+                    )
             else:
                 not_found += 1
                 date_str = data['date'].strftime(config.DATE_FORMAT_EXCEL)
-                time_str = f"{data['time_hour']:02d}:{data['time_minute']:02d}"
+                time_str = f"{data['time_hour']:02d}.{data['time_minute']:02d}"
                 self._update_progress(f"✗ Tidak ditemukan: {sheet_name} {date_str} {time_str}")
         
-        self._update_progress(f"Total: {written} data ditulis, {not_found} tidak ditemukan")
+        self._update_progress(f"Total: {written} ditulis, {skipped} di-skip, {not_found} tidak ditemukan")
 
 
 def write_to_excel(file_path: str, data_list: List[Dict],

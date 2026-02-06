@@ -20,57 +20,46 @@ INTERFACE_TO_SHEET = {
 # Slot waktu yang akan diambil datanya
 # Format: (jam, menit)
 TIME_SLOTS = [
-    (9, 0),   # 09:00
-    (16, 0),  # 16:00
+    (9, 0),   # 09.00
+    (16, 0),  # 16.00
 ]
 
 # ============================================================
 # KONFIGURASI KOLOM EXCEL
 # ============================================================
-# Sesuaikan nama kolom dengan yang ada di file Excel kantor
-# Bisa berupa nama kolom (string) atau nomor kolom (integer, 1-indexed)
+# Sesuai dengan struktur Excel asli dari kantor
 
-# Kolom untuk tanggal (biasanya kolom A = 1)
-EXCEL_COL_TANGGAL = 1  # atau "tanggal"
+# Kolom untuk tanggal (kolom A = 1)
+EXCEL_COL_TANGGAL = 1
 
-# Kolom untuk waktu (biasanya kolom B = 2)
-EXCEL_COL_WAKTU = 2  # atau "waktu"
+# Kolom untuk waktu (kolom B = 2)
+EXCEL_COL_WAKTU = 2
 
 # Kolom data bandwidth
-EXCEL_COL_CURR_IN = 3   # Current Inbound
-EXCEL_COL_CURR_OUT = 4  # Current Outbound
-EXCEL_COL_MAX_IN = 5    # Maximum Inbound
-EXCEL_COL_MAX_OUT = 6   # Maximum Outbound
-EXCEL_COL_AVG_IN = 7    # Average Inbound
-EXCEL_COL_AVG_OUT = 8   # Average Outbound
+EXCEL_COL_CURR_IN = 3   # Kolom C: Curent(IN)
+EXCEL_COL_CURR_OUT = 4  # Kolom D: Curent (Out)
+EXCEL_COL_MAX_IN = 5    # Kolom E: Max (IN)
+EXCEL_COL_MAX_OUT = 6   # Kolom F: Max (Out)
+EXCEL_COL_AVG_IN = 7    # Kolom G: Average (IN)
+EXCEL_COL_AVG_OUT = 8   # Kolom H: Average (Out)
 
 # ============================================================
 # FORMAT WAKTU DI EXCEL
 # ============================================================
-# Sesuaikan format waktu yang dipakai di Excel kantor
-# Contoh: "09:00", "09:00:00", "9:00", dll.
+# Format waktu yang dipakai di Excel kantor
+# PENTING: Excel kantor pakai TITIK bukan TITIK DUA!
+# Contoh: "09.00", "16.00"
 
-# Format waktu untuk matching (gunakan strftime format)
-# %H = jam 24-hour dengan leading zero (09)
-# %M = menit dengan leading zero (00)
-# %S = detik dengan leading zero (00)
-TIME_FORMAT_EXCEL = "%H:%M"  # Contoh hasil: "09:00"
+TIME_FORMAT_EXCEL = "%H.%M"  # Hasil: "09.00", "16.00"
 
-# Alternatif format jika perlu detik:
-# TIME_FORMAT_EXCEL = "%H:%M:%S"  # Contoh hasil: "09:00:00"
+# Alternatif jika pakai titik dua:
+# TIME_FORMAT_EXCEL = "%H:%M"  # Hasil: "09:00", "16:00"
 
 # ============================================================
 # FORMAT TANGGAL DI EXCEL
 # ============================================================
 # Format tanggal yang dipakai di Excel
-# %d = tanggal dengan leading zero (01)
-# %m = bulan dengan leading zero (02)
-# %Y = tahun 4 digit (2026)
-
-DATE_FORMAT_EXCEL = "%d/%m/%Y"  # Contoh hasil: "01/02/2026"
-
-# Alternatif format:
-# DATE_FORMAT_EXCEL = "%Y-%m-%d"  # Contoh hasil: "2026-02-01"
+DATE_FORMAT_EXCEL = "%d/%m/%Y"  # Hasil: "02/01/2026"
 
 # ============================================================
 # PENGATURAN BROWSER
@@ -90,5 +79,12 @@ ACTION_DELAY = 1.0
 # BARIS AWAL DATA DI EXCEL
 # ============================================================
 # Baris pertama yang berisi data (bukan header)
-# Biasanya baris 2 jika baris 1 adalah header
+# Baris 1 adalah header, jadi data mulai dari baris 2
 EXCEL_DATA_START_ROW = 2
+
+# ============================================================
+# FITUR SKIP BARIS TERISI
+# ============================================================
+# Jika True, program akan melewati baris yang sudah ada datanya
+# dan hanya mengisi baris yang masih kosong
+SKIP_FILLED_ROWS = True
