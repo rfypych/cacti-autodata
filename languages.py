@@ -39,26 +39,36 @@ LANGUAGES = {
         "btn_help": "❓ Help",
         "btn_exit": "❌ Keluar",
         
-        # Help window
-        "help_title": "❓ Bantuan - Cara Penggunaan",
-        "help_header": "📋 Langkah-Langkah Penggunaan",
-        "help_steps": """
-1️⃣  Pastikan Anda terhubung ke jaringan kantor
-     (komputer harus bisa mengakses Cacti)
+        # Help window - IMPROVED
+        "help_title": "❓ Bantuan - Cacti AutoData",
+        "help_basic_title": "📋 LANGKAH DASAR",
+        "help_basic_steps": """1. Pastikan terhubung ke jaringan kantor
+2. Pilih range tanggal (klik 📅 untuk kalender)
+3. Browse file Excel dari kantor
+4. Pilih sheet yang akan diproses
+5. Klik "🚀 Mulai Rekap\"""",
 
-2️⃣  Isi tanggal mulai dan tanggal akhir sesuai
-     range yang ingin direkap
+        "help_features_title": "✨ FITUR LENGKAP",
+        "help_features": """🏠 Tab Main      → Input data & mulai proses
+⚙️ Tab Settings  → Ubah URL, format waktu, mapping
+👁️ Tab Preview   → Lihat data sebelum ditulis
 
-3️⃣  Klik "Browse" untuk memilih file Excel
-     yang sudah disediakan dari kantor
+📑 Sheet Selector → Pilih sheet mana yang diproses
+🧪 Dry Run Mode   → Test tanpa menulis ke Excel
+💾 Export Log     → Simpan log ke file .txt
+🔄 Auto-Save      → Settings & path tersimpan otomatis""",
 
-4️⃣  Klik "🚀 Mulai Rekap" dan tunggu prosesnya
-     selesai
+        "help_tips_title": "💡 TIPS",
+        "help_tips": """• Skip Filled Rows = lewati baris yang sudah terisi
+• Gunakan Dry Run dulu untuk test
+• Cek Preview sebelum Write to Excel
+• Settings tersimpan di user_settings.json""",
 
-5️⃣  Program akan otomatis membuka browser,
-     mengambil data, dan mengisi Excel""",
-        "help_warning1": "⚠️  Jangan tutup browser yang terbuka saat proses berjalan!",
-        "help_warning2": "⚠️  Jika ada error, periksa file config.py untuk menyesuaikan pengaturan",
+        "help_warnings_title": "⚠️ PERINGATAN",
+        "help_warning1": "Jangan tutup browser saat proses berjalan!",
+        "help_warning2": "Backup Excel sebelum proses pertama kali",
+        "help_warning3": "Pastikan file Excel tidak sedang dibuka di program lain",
+        
         "help_creator": "Dibuat oleh: Rofikul Huda | GitHub: @rfypych",
         
         # Messages
@@ -105,26 +115,36 @@ LANGUAGES = {
         "btn_help": "❓ Help",
         "btn_exit": "❌ Exit",
         
-        # Help window
-        "help_title": "❓ Help - How to Use",
-        "help_header": "📋 Step-by-Step Guide",
-        "help_steps": """
-1️⃣  Make sure you are connected to the office network
-     (computer must be able to access Cacti)
+        # Help window - IMPROVED
+        "help_title": "❓ Help - Cacti AutoData",
+        "help_basic_title": "📋 BASIC STEPS",
+        "help_basic_steps": """1. Make sure you're connected to office network
+2. Select date range (click 📅 for calendar)
+3. Browse to your Excel file
+4. Select which sheets to process
+5. Click "🚀 Start Recording\"""",
 
-2️⃣  Fill in the start date and end date according
-     to the range you want to record
+        "help_features_title": "✨ FEATURES",
+        "help_features": """🏠 Main Tab      → Input data & start process
+⚙️ Settings Tab  → Change URL, time format, mapping
+👁️ Preview Tab   → View data before writing
 
-3️⃣  Click "Browse" to select the Excel file
-     provided by the office
+📑 Sheet Selector → Choose which sheets to process
+🧪 Dry Run Mode   → Test without writing to Excel
+💾 Export Log     → Save log to .txt file
+🔄 Auto-Save      → Settings & paths saved automatically""",
 
-4️⃣  Click "🚀 Start Recording" and wait for the
-     process to complete
+        "help_tips_title": "💡 TIPS",
+        "help_tips": """• Skip Filled Rows = skip rows with existing data
+• Use Dry Run first to test
+• Check Preview before Write to Excel
+• Settings saved in user_settings.json""",
 
-5️⃣  The program will automatically open a browser,
-     retrieve data, and fill in the Excel file""",
-        "help_warning1": "⚠️  Do not close the browser while the process is running!",
-        "help_warning2": "⚠️  If there's an error, check config.py to adjust settings",
+        "help_warnings_title": "⚠️ WARNINGS",
+        "help_warning1": "Don't close browser while process is running!",
+        "help_warning2": "Backup Excel before first run",
+        "help_warning3": "Make sure Excel file is not open elsewhere",
+        
         "help_creator": "Created by: Rofikul Huda | GitHub: @rfypych",
         
         # Messages
