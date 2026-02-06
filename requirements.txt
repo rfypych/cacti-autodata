@@ -1,6 +1,6 @@
 # Core dependencies
-selenium>=4.15.0
+selenium>=4.6.0
 openpyxl>=3.1.0
 
-# Note: selenium 4.6+ has built-in driver manager
+# Note: selenium 4.6+ has built-in driver manager (Selenium Manager)
 # No need for webdriver-manager anymore
