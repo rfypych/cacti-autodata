@@ -1,15 +1,6 @@
-# Cacti AutoData Dependencies
-# Python 3.8+ required
-
-# Browser automation
+# Core dependencies
 selenium>=4.15.0
-
-# Excel file handling
 openpyxl>=3.1.0
 
-# WebDriver auto-management
-webdriver-manager>=4.0.0
-
-# HTTP library (fix urllib3 conflict)
-requests>=2.31.0
-urllib3>=2.0.0
+# Note: selenium 4.6+ has built-in driver manager
+# No need for webdriver-manager anymore

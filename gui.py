@@ -287,6 +287,29 @@ class CactiAutoDataGUI:
         self.show_browser_var = tk.BooleanVar(value=self.settings.get("show_browser", True))
         ttk.Checkbutton(browser_frame, text="Show browser window (tampilkan browser saat scraping)", variable=self.show_browser_var).pack(anchor=tk.W)
         
+        self.attach_existing_var = tk.BooleanVar(value=self.settings.get("attach_existing", False))
+        ttk.Checkbutton(browser_frame, text="🔗 Attach to existing Chrome (gunakan browser yang sudah terbuka)", variable=self.attach_existing_var).pack(anchor=tk.W)
+        
+        # Info for attach mode
+        attach_info = ttk.Frame(browser_frame)
+        attach_info.pack(fill=tk.X, pady=(5, 0))
+        
+        ttk.Label(
+            attach_info,
+            text="💡 Untuk pakai Chrome existing, jalankan Chrome dengan command:",
+            font=("Segoe UI", 8, "italic"),
+            foreground="gray"
+        ).pack(anchor=tk.W)
+        
+        cmd_frame = ttk.Frame(attach_info)
+        cmd_frame.pack(fill=tk.X, pady=2)
+        
+        self.debug_cmd_var = tk.StringVar(value='"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222')
+        cmd_entry = ttk.Entry(cmd_frame, textvariable=self.debug_cmd_var, font=("Consolas", 8), state="readonly")
+        cmd_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        ttk.Button(cmd_frame, text="📋 Copy", width=8, command=self._copy_debug_cmd).pack(side=tk.LEFT, padx=5)
+        
         # Save/Reset buttons
         btn_frame = ttk.Frame(self.settings_frame)
         btn_frame.pack(fill=tk.X, pady=10)
@@ -466,6 +489,12 @@ class CactiAutoDataGUI:
         self.start_btn.config(text=get_text("btn_start", lang))
         self.stop_btn.config(text=get_text("btn_stop", lang))
     
+    def _copy_debug_cmd(self):
+        """Copy debug command to clipboard"""
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.debug_cmd_var.get())
+        messagebox.showinfo("Info", "Command copied to clipboard!\n\nPaste dan jalankan di Command Prompt.")
+    
     def _browse_excel(self):
         """Browse for Excel file"""
         file_path = filedialog.askopenfilename(
@@ -609,8 +638,9 @@ class CactiAutoDataGUI:
             # Filter interfaces by selected sheets
             selected_sheets = [name for name, var in self.sheet_vars.items() if var.get()]
             
-            # Scrape data
-            data = run_scraper(start_date, end_date, self._update_progress)
+            # Scrape data with attach option
+            attach_existing = self.attach_existing_var.get()
+            data = run_scraper(start_date, end_date, self._update_progress, attach_to_existing=attach_existing)
             
             # Filter by selected sheets
             data = [d for d in data if d.get('sheet') in selected_sheets]

@@ -1,6 +1,10 @@
 """
 Cacti Scraper Module
 Mengambil data bandwidth dari halaman Cacti menggunakan Selenium
+
+Features:
+- Auto driver management (no webdriver-manager needed)
+- Option to attach to existing Chrome session
 """
 
 import re
@@ -12,9 +16,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 
 import config
 
@@ -31,33 +33,62 @@ class CactiScraper:
         """
         self.driver = None
         self.progress_callback = progress_callback or (lambda msg, pct: None)
+        self.attached_to_existing = False
     
     def _update_progress(self, message: str, percentage: int = -1):
         """Update progress via callback"""
         self.progress_callback(message, percentage)
     
-    def start_browser(self):
-        """Mulai browser Chrome"""
-        self._update_progress("Memulai browser Chrome...", 5)
+    def start_browser(self, attach_to_existing: bool = False, debug_port: int = 9222):
+        """
+        Mulai browser Chrome
         
+        Args:
+            attach_to_existing: Jika True, coba connect ke Chrome yang sudah berjalan
+            debug_port: Port untuk remote debugging (default: 9222)
+        """
         chrome_options = Options()
+        
+        # Try to attach to existing Chrome session
+        if attach_to_existing:
+            self._update_progress(f"Mencoba connect ke Chrome (port {debug_port})...", 5)
+            try:
+                chrome_options.add_experimental_option("debuggerAddress", f"localhost:{debug_port}")
+                self.driver = webdriver.Chrome(options=chrome_options)
+                self.attached_to_existing = True
+                self._update_progress("✓ Berhasil connect ke Chrome yang sudah terbuka!", 10)
+                return
+            except Exception as e:
+                self._update_progress(f"⚠ Tidak bisa connect ke Chrome existing: {str(e)}")
+                self._update_progress("Memulai browser Chrome baru...", 5)
+        else:
+            self._update_progress("Memulai browser Chrome...", 5)
+        
+        # Start new Chrome session
+        chrome_options = Options()  # Reset options
+        
         if not config.SHOW_BROWSER:
-            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--headless=new")  # New headless mode
+        
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         
-        service = Service(ChromeDriverManager().install())
-        self.driver = webdriver.Chrome(service=service, options=chrome_options)
+        # Selenium 4.6+ has built-in driver manager, no need for webdriver-manager
+        self.driver = webdriver.Chrome(options=chrome_options)
         self.driver.set_page_load_timeout(config.PAGE_LOAD_TIMEOUT)
+        self.attached_to_existing = False
         
         self._update_progress("Browser siap!", 10)
     
     def close_browser(self):
-        """Tutup browser"""
+        """Tutup browser (skip jika attached to existing)"""
         if self.driver:
-            self.driver.quit()
+            if self.attached_to_existing:
+                self._update_progress("Browser existing tidak ditutup (managed externally)")
+            else:
+                self.driver.quit()
             self.driver = None
     
     def navigate_to_cacti(self):
@@ -247,7 +278,8 @@ class CactiScraper:
 
 
 def run_scraper(start_date: datetime, end_date: datetime, 
-                progress_callback: Optional[Callable] = None) -> List[Dict]:
+                progress_callback: Optional[Callable] = None,
+                attach_to_existing: bool = False) -> List[Dict]:
     """
     Fungsi utama untuk menjalankan scraper
     
@@ -255,6 +287,7 @@ def run_scraper(start_date: datetime, end_date: datetime,
         start_date: Tanggal mulai
         end_date: Tanggal akhir
         progress_callback: Callback untuk progress update
+        attach_to_existing: Jika True, coba connect ke Chrome yang sudah berjalan
         
     Returns:
         List data yang di-scrape
@@ -262,9 +295,31 @@ def run_scraper(start_date: datetime, end_date: datetime,
     scraper = CactiScraper(progress_callback)
     
     try:
-        scraper.start_browser()
+        scraper.start_browser(attach_to_existing=attach_to_existing)
         scraper.navigate_to_cacti()
         data = scraper.scrape_date_range(start_date, end_date)
         return data
     finally:
         scraper.close_browser()
+
+
+def start_chrome_debug_mode():
+    """
+    Instruksi untuk menjalankan Chrome dengan debug mode
+    
+    User harus jalankan command ini di Command Prompt:
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222
+    
+    Kemudian baru bisa attach ke session tersebut
+    """
+    import subprocess
+    import sys
+    
+    chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    cmd = f'"{chrome_path}" --remote-debugging-port=9222'
+    
+    print(f"Untuk menggunakan Chrome existing, jalankan command ini:")
+    print(f"\n{cmd}\n")
+    print("Kemudian buka Cacti di browser tersebut, dan jalankan program dengan opsi 'Attach to Existing'")
+    
+    return cmd
