@@ -668,8 +668,9 @@ class CactiAutoDataGUI:
                     ))
             
         except Exception as e:
-            self._update_progress(f"❌ Error: {str(e)}")
-            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+            err_msg = str(e)
+            self._update_progress(f"❌ Error: {err_msg}")
+            self.root.after(0, lambda: messagebox.showerror("Error", err_msg))
         
         finally:
             self.is_running = False

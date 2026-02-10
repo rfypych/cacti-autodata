@@ -19,6 +19,14 @@ INTERFACE_TO_SHEET = {
     "Moratel": "Moratel",   # Was ether6-Moratel
 }
 
+# Mapping interface ke Graph ID Cacti (untuk mode tanpa Selenium)
+# Didapat dari inspect HTML halaman Cacti
+GRAPH_IDS = {
+    "iForte": "1503",
+    "Telkom": "1573",
+    "Moratel": "1528",
+}
+
 # Slot waktu yang akan diambil datanya
 # Format: (jam, menit)
 TIME_SLOTS = [

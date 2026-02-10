@@ -1,22 +1,30 @@
 """
 Cacti Scraper Module
-Mengambil data bandwidth dari halaman Cacti menggunakan Selenium
+Mengambil data bandwidth dari halaman Cacti
 
 Features:
-- Auto driver management (no webdriver-manager needed)
-- Option to attach to existing Chrome session
+- Mode cepat: requests only (tanpa browser)
+- Fallback: Selenium jika diperlukan
 """
 
 import re
+import os
+import json
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Callable
+from io import StringIO
+import csv as csv_mod
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
+try:
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.chrome.options import Options
+    HAS_SELENIUM = True
+except ImportError:
+    HAS_SELENIUM = False
 
 import config
 
@@ -559,32 +567,144 @@ class CactiScraper:
             "max_out": fmt(max_out),
         }
 
+    # ================================================================
+    # MODE CEPAT: Requests only (tanpa Selenium)
+    # ================================================================
+    
+    def _setup_requests_session(self):
+        """Setup requests session dari cookies file (tanpa Selenium)"""
+        import requests as req
+        import urllib3
+        import json
+        import os
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        cookies_file = os.path.join(os.path.dirname(__file__), "cacti_cookies.json")
+        if not os.path.exists(cookies_file):
+            raise FileNotFoundError(
+                "cacti_cookies.json tidak ditemukan! "
+                "Jalankan setup_session.py dulu untuk login ke Cacti."
+            )
+        
+        with open(cookies_file) as f:
+            cookies = json.load(f)
+        
+        session = req.Session()
+        for c in cookies:
+            session.cookies.set(c['name'], c['value'], domain=c.get('domain'))
+        
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': config.CACTI_URL,
+        })
+        
+        # Test koneksi
+        from urllib.parse import urlparse
+        parsed = urlparse(config.CACTI_URL)
+        test_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        
+        try:
+            resp = session.get(test_url, verify=False, timeout=10)
+            if resp.status_code != 200 or 'login' in resp.url.lower():
+                raise ConnectionError(
+                    "Cookie expired! Jalankan setup_session.py untuk login ulang."
+                )
+        except req.ConnectionError:
+            raise ConnectionError(
+                f"Tidak bisa terhubung ke {parsed.netloc}. Pastikan VPN/jaringan kantor aktif."
+            )
+        
+        self._update_progress("✓ Koneksi ke Cacti berhasil (mode cepat, tanpa browser)")
+        return session
+
+    def scrape_date_range_fast(self, start_date: datetime, end_date: datetime) -> List[Dict]:
+        """
+        Scrape data menggunakan requests langsung (tanpa Selenium).
+        Jauh lebih cepat dan stabil.
+        """
+        all_data = []
+        
+        # Setup session
+        session = self._setup_requests_session()
+        
+        # Hitung total iterasi untuk progress
+        days = (end_date - start_date).days + 1
+        total_iterations = days * len(config.TIME_SLOTS) * len(config.GRAPH_IDS)
+        current_iteration = 0
+        
+        self._update_progress(f"Mulai scraping {days} hari x {len(config.TIME_SLOTS)} slot x {len(config.GRAPH_IDS)} interface...", 15)
+        
+        current_date = start_date
+        while current_date <= end_date:
+            for hour, minute in config.TIME_SLOTS:
+                time_str = f"{hour:02d}:{minute:02d}"
+                date_str = current_date.strftime(config.DATE_FORMAT_EXCEL)
+                
+                # Hitung timestamp
+                from_dt = current_date.replace(hour=0, minute=0, second=0)
+                to_dt = current_date.replace(hour=hour, minute=minute, second=0)
+                
+                start_ts = int(from_dt.timestamp())
+                end_ts = int(to_dt.timestamp()) + 300  # +5 menit buffer
+                
+                # Ambil CSV untuk setiap interface
+                for interface_name, graph_id in config.GRAPH_IDS.items():
+                    current_iteration += 1
+                    progress = 15 + int((current_iteration / total_iterations) * 70)
+                    
+                    self._update_progress(
+                        f"📊 {date_str} {time_str} - {interface_name}...",
+                        progress
+                    )
+                    
+                    csv_data = self._get_csv_data(session, graph_id, start_ts, end_ts)
+                    if not csv_data:
+                        self._update_progress(f"  ✗ {interface_name}: gagal ambil data")
+                        continue
+                    
+                    stats = self._calculate_stats_from_csv(csv_data['rows'], csv_data['header'])
+                    if stats:
+                        all_data.append({
+                            "date": current_date,
+                            "time_hour": hour,
+                            "time_minute": minute,
+                            "interface": interface_name,
+                            "sheet": config.INTERFACE_TO_SHEET.get(interface_name),
+                            **stats
+                        })
+                        self._update_progress(f"  ✓ {interface_name}: OK")
+                    else:
+                        self._update_progress(f"  ✗ {interface_name}: tidak ada data")
+            
+            current_date += timedelta(days=1)
+        
+        self._update_progress(f"Selesai mengambil {len(all_data)} data!", 85)
+        return all_data
 
 
 def run_scraper(start_date: datetime, end_date: datetime, 
                 progress_callback: Optional[Callable] = None,
                 attach_to_existing: bool = False) -> List[Dict]:
     """
-    Fungsi utama untuk menjalankan scraper
+    Fungsi utama untuk menjalankan scraper.
+    
+    Default: mode cepat (requests only, tanpa browser).
+    Jauh lebih cepat dan stabil daripada Selenium.
     
     Args:
         start_date: Tanggal mulai
         end_date: Tanggal akhir
         progress_callback: Callback untuk progress update
-        attach_to_existing: Jika True, coba connect ke Chrome yang sudah berjalan
+        attach_to_existing: Tidak dipakai di mode cepat
         
     Returns:
         List data yang di-scrape
     """
     scraper = CactiScraper(progress_callback)
     
-    try:
-        scraper.start_browser(attach_to_existing=attach_to_existing)
-        scraper.navigate_to_cacti()
-        data = scraper.scrape_date_range(start_date, end_date)
-        return data
-    finally:
-        scraper.close_browser()
+    # Mode cepat: tanpa Selenium, pakai requests langsung
+    data = scraper.scrape_date_range_fast(start_date, end_date)
+    return data
 
 
 def start_chrome_debug_mode():
