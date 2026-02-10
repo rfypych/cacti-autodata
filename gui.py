@@ -642,8 +642,17 @@ class CactiAutoDataGUI:
             attach_existing = self.attach_existing_var.get()
             data = run_scraper(start_date, end_date, self._update_progress, attach_to_existing=attach_existing)
             
-            # Filter by selected sheets
-            data = [d for d in data if d.get('sheet') in selected_sheets]
+            # Filter by selected sheets (if any selected)
+            if selected_sheets and data:
+                filtered = [d for d in data if d.get('sheet') in selected_sheets]
+                if filtered:
+                    data = filtered
+                else:
+                    # Sheet names don't match - show all data + warning
+                    available = set(d.get('sheet') for d in data)
+                    self._update_progress(
+                        f"⚠ Sheet filter mismatch: selected={selected_sheets}, available={available}. Menampilkan semua data."
+                    )
             
             self.scraped_data = data
             
