@@ -104,6 +104,4 @@ test_*.py
 # Chrome debug profile
 cacti_debug/
 
-# Setup session helper (not needed in repo)
-setup_session.py
 
