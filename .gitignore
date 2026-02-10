@@ -65,6 +65,7 @@ Thumbs.db
 
 # Project specific
 output/
+result/
 *.xlsx
 *.xls
 
@@ -74,9 +75,35 @@ geckodriver*
 
 # Logs
 *.log
+*.txt
+!requirements.txt
+!README.md
 
 # Chrome profile (contains login session)
 chrome_profile/
 
 # User settings (local preferences)
 user_settings.json
+
+# Session cookies (SENSITIF - berisi session login)
+cacti_cookies.json
+temp_cookies.db
+
+# Config lokal (berisi URL & mapping spesifik kantor)
+config.py
+
+# Debug/test scripts & artifacts
+debug_*.py
+debug_*.svg
+test_*.py
+
+# Saved HTML pages (reference material)
+*.html
+*_files/
+
+# Chrome debug profile
+cacti_debug/
+
+# Setup session helper (not needed in repo)
+setup_session.py
+

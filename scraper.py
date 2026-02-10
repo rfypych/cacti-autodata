@@ -104,6 +104,52 @@ class CactiScraper:
         
         cookies_file = os.path.join(os.path.dirname(__file__), "cacti_cookies.json")
         
+        if "auth_login.php" in self.driver.current_url:
+            self._update_progress("⚠ Terdeteksi halaman Login (cookie expired/invalid).")
+            
+            if not config.SHOW_BROWSER:
+                self._update_progress("❌ Headless mode: Tidak bisa login manual. Stop.")
+                return False
+                
+            self._update_progress("⏳ MENUNGGU LOGIN MANUAL...", 100)
+            print("\n" + "="*50)
+            print("SILAKAN LOGIN MANUAL DI BROWSER CHROME YANG TERBUKA")
+            print("1. Masukkan Username & Password")
+            print("2. Klik Login sampai masuk Dashboard")
+            print("3. KEMBALI KE SINI dan tekan ENTER untuk lanjut...")
+            print("="*50 + "\n")
+            
+            input("Tekan Enter setelah Anda berhasil Login...")
+            
+            # Save new cookies for next time
+            import json
+            cookies = self.driver.get_cookies()
+            cookies_file = os.path.join(os.path.dirname(__file__), "cacti_cookies.json")
+            
+            # Convert to our JSON format
+            json_cookies = []
+            for c in cookies:
+                json_cookies.append({
+                    "name": c['name'],
+                    "value": c['value'],
+                    "domain": c.get('domain', ''),
+                    "path": c.get('path', '/'),
+                    "secure": c.get('secure', False)
+                })
+                
+            with open(cookies_file, 'w') as f:
+                json.dump(json_cookies, f, indent=2)
+            self._update_progress(f"✅ Cookies baru disimpan ({len(cookies)} cookies)!", -1)
+            
+            # Refresh to confirm
+            self.driver.get(config.CACTI_URL)
+            time.sleep(3)
+        
+        # Cek lagi setelah potensi manual login
+        if "auth_login.php" in self.driver.current_url:
+            self._update_progress("❌ Masih di halaman login. Gagal.")
+            return False
+        
         if not os.path.exists(cookies_file):
             self._update_progress("ℹ Tidak ada cookies tersimpan (first run)")
             return
@@ -202,79 +248,245 @@ class CactiScraper:
         except Exception as e:
             self._update_progress(f"Warning: Gagal set filter waktu - {str(e)}")
     
-    def parse_bandwidth_value(self, text: str) -> Optional[float]:
+    def extract_graph_data(self, start_ts: int = 0, end_ts: int = 0) -> Dict[str, Dict]:
         """
-        Parse nilai bandwidth dari teks
-        Contoh: "63.98 M" → 63.98, "15.79 K" → 15.79
+        Ekstrak data dari semua graph menggunakan fitur CSV Export Cacti
         
+        Args:
+            start_ts: Unix timestamp awal
+            end_ts: Unix timestamp akhir
+            
         Returns:
-            Nilai sebagai string dengan satuan, atau None jika gagal
-        """
-        if not text:
-            return None
-        
-        # Ambil angka dan satuan
-        match = re.search(r'([\d.]+)\s*([KMGTP]?)', text.strip(), re.IGNORECASE)
-        if match:
-            value = match.group(1)
-            unit = match.group(2).upper() if match.group(2) else ""
-            return f"{value} {unit}".strip()
-        return text.strip()
-    
-    def extract_graph_data(self) -> Dict[str, Dict]:
-        """
-        Ekstrak data dari semua graph yang ditampilkan
-        
-        Returns:
-            Dictionary dengan format:
-            {
-                "ether4-iForte": {
-                    "curr_in": "63.98 M",
-                    "curr_out": "25.70 M",
-                    "max_in": "63.09 M",
-                    "max_out": "59.62 M",
-                    "avg_in": "20.81 M",
-                    "avg_out": "26.33 M"
-                },
-                ...
-            }
+            Dictionary data bandwidth
         """
         result = {}
+        processed_ids = set()
         
         try:
-            # Tunggu graph dimuat
+            # 1. Tunggu graph dimuat untuk memastikan page render
             WebDriverWait(self.driver, config.PAGE_LOAD_TIMEOUT).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".graphWrapper, .rrdGraph, div[id*='graph']"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div[id*='wrapper_']"))
             )
             
-            # Cari semua container graph
-            # Cacti biasanya menampilkan data di bawah graph
+            # 2. Cari semua graph ID (wrapper_1234)
             page_source = self.driver.page_source
+            # Pattern: id="wrapper_1730"
+            graph_ids = re.findall(r'id=["\']wrapper_(\d+)["\']', page_source)
+            # Filter duplicates
+            unique_graph_ids = list(set(graph_ids))
             
-            for interface_name in config.INTERFACE_TO_SHEET.keys():
-                # Cari section yang mengandung nama interface
-                pattern = rf'{re.escape(interface_name)}.*?Inbound.*?Current:\s*([\d.]+\s*[KMGTP]?).*?Average:\s*([\d.]+\s*[KMGTP]?).*?Maximum:\s*([\d.]+\s*[KMGTP]?).*?Outbound.*?Current:\s*([\d.]+\s*[KMGTP]?).*?Average:\s*([\d.]+\s*[KMGTP]?).*?Maximum:\s*([\d.]+\s*[KMGTP]?)'
+            # Quiet log
+            # self._update_progress(f"Found {len(unique_graph_ids)} graphs: {unique_graph_ids}", -1)
+            
+            # 3. Setup session requests untuk download CSV
+            import requests
+            session = requests.Session()
+            # Copy cookies dari Selenium driver ke requests session
+            for cookie in self.driver.get_cookies():
+                session.cookies.set(cookie['name'], cookie['value'], domain=cookie.get('domain'))
+            
+            # User agent syncing (PENTING: Gunakan UA yang sama persis dengan browser)
+            # Cacti bisa menolak session jika UA beda
+            user_agent = self.driver.execute_script("return navigator.userAgent;")
+            session.headers.update({
+                'User-Agent': user_agent,
+                'Referer': config.CACTI_URL,
+                'X-Requested-With': 'XMLHttpRequest'
+            })
+            
+            # 4. Ambil dan parse CSV untuk setiap graph
+            for graph_id in unique_graph_ids:
+                if graph_id in processed_ids:
+                    continue
                 
-                match = re.search(pattern, page_source, re.IGNORECASE | re.DOTALL)
+                # Pass timestamp ke fungsi get_csv
+                csv_data = self._get_csv_data(session, graph_id, start_ts, end_ts)
+                if not csv_data:
+                    continue
                 
-                if match:
-                    result[interface_name] = {
-                        "curr_in": self.parse_bandwidth_value(match.group(1)),
-                        "avg_in": self.parse_bandwidth_value(match.group(2)),
-                        "max_in": self.parse_bandwidth_value(match.group(3)),
-                        "curr_out": self.parse_bandwidth_value(match.group(4)),
-                        "avg_out": self.parse_bandwidth_value(match.group(5)),
-                        "max_out": self.parse_bandwidth_value(match.group(6)),
-                    }
-                    self._update_progress(f"✓ Data {interface_name} ditemukan")
+                # Cek Title untuk mapping ke interface name
+                # Contoh Title: "Router BGP Ngawi - Traffic - ether2-LocalNet"
+                title = csv_data.get("title", "")
+                
+                matched_interface = None
+                for interface_key in config.INTERFACE_TO_SHEET.keys():
+                    # Case insensitive check
+                    if interface_key.lower() in title.lower():
+                        matched_interface = interface_key
+                        break
+                
+                if matched_interface:
+                    stats = self._calculate_stats_from_csv(csv_data['rows'], csv_data['header'])
+                    result[matched_interface] = stats
+                    self._update_progress(f"✓ Data {matched_interface} berhasil diambil")
+                    processed_ids.add(graph_id)
                 else:
+                    # Graph ini bukan target kita (misal CPU usage, dll)
+                    pass
+
+            # Isi None untuk interface yang tidak ditemukan
+            for interface_name in config.INTERFACE_TO_SHEET.keys():
+                if interface_name not in result:
                     self._update_progress(f"✗ Data {interface_name} tidak ditemukan")
                     result[interface_name] = None
                     
         except Exception as e:
             self._update_progress(f"Error saat extract data: {str(e)}")
+            import traceback
+            traceback.print_exc()
         
         return result
+
+    def _get_csv_data(self, session, graph_id: str, start_ts: int = 0, end_ts: int = 0) -> Optional[Dict]:
+        """Download dan parse CSV dari Cacti"""
+        import csv
+        from io import StringIO
+        from urllib.parse import urlparse
+        
+        # Parse Base URL untuk membuang query params yang ada di config.CACTI_URL
+        parsed_url = urlparse(config.CACTI_URL)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
+        
+        # Ganti graph_view.php dengan graph_xport.php
+        xport_url = base_url.replace('graph_view.php', 'graph_xport.php')
+        
+        # Construct clean URL
+        # rra_id=1 typical for Daily (5 Min Average) high res
+        url = f"{xport_url}?local_graph_id={graph_id}&rra_id=1&view_type=tree"
+        
+        # Append specific time range if provided
+        if start_ts > 0 and end_ts > 0:
+            url += f"&graph_start={start_ts}&graph_end={end_ts}"
+        
+        # self._update_progress(f"    [DEBUG] URL: {url}", -1)
+        
+        try:
+            resp = session.get(url, verify=False)
+            if resp.status_code != 200:
+                self._update_progress(f"Gagal download CSV ID {graph_id}: Status {resp.status_code}", -1)
+                return None
+            
+            # Parse CSV Content
+            content = resp.text
+            # self._update_progress(f"    [DEBUG] Raw Content: {repr(content[:50])}...", -1)
+            
+            f = StringIO(content)
+            reader = csv.reader(f)
+            
+            metadata = {}
+            rows = []
+            
+            reading_data = False
+            header_row = None
+            
+            for row in reader:
+                if not row:
+                    continue
+                
+                # Handle "Title" with potential BOM
+                if len(row) >= 2 and "Title" in row[0]:
+                    metadata['title'] = row[1]
+                
+                if row[0] == "Date":
+                    reading_data = True
+                    header_row = row
+                    continue
+                
+                if reading_data:
+                    rows.append(row)
+            
+            return {
+                "title": metadata.get('title', ''),
+                "header": header_row,
+                "rows": rows
+            }
+            
+        except Exception as e:
+            self._update_progress(f"Error parsing CSV ID {graph_id}: {str(e)}", -1)
+            return None
+
+    def _calculate_stats_from_csv(self, rows: List[List[str]]) -> Dict:
+        """Hitung statistik (Current/Avg/Max) dari data mentah CSV"""
+        # Mapping kolom: biasanya col 1 & 3 adalah In & Out (setelah date)
+        # Tapi header bisa: Date, col, Inbound, col, Outbound
+        # Kita perlu cari index kolom yang valid
+        
+        # Sederhana: ambil 2 kolom numerik pertama yang kita temukan pada data row terakhir valid
+        # Namun, kita butuh AVG val, MAX val, CURR val. 
+        # CSV export (xport) Cacti "Daily" memberikan data per 5 menit (series).
+        # Jadi kita harus hitung manual:
+        # Current = Baris terakhir (atau rata-rata beberapa baris terakhir)
+        # Average = Rata-rata seluruh baris
+        # Max = Nilai maksimum seluruh baris
+        
+        in_values = []
+        out_values = []
+        
+        for row in rows:
+            # row[0] is Date
+            # row[1]... are values. Some might be NaN.
+            # Berdasarkan sampel: 
+            # Date, col12(InVal), Inbound(InVal), col14(OutVal), Outbound(OutVal)
+            # Jadi index 1 dan 3 (0-based: 1, 3) adalah raw val
+            
+            try:
+                # Kolom 1 biasanya Inbound (jika format standar)
+                # Parse float
+                val_in = float(row[1]) if row[1] and row[1] != 'NaN' else 0.0
+                in_values.append(val_in)
+                
+                # Kolom 3 biasanya Outbound
+                # Cacti row length sample: 7 items (Date, val1, val1_rpt, val2, val2_rpt, ...)
+                if len(row) > 3:
+                     val_out = float(row[3]) if row[3] and row[3] != 'NaN' else 0.0
+                     out_values.append(val_out)
+            except (ValueError, IndexError):
+                continue
+                
+        # Helper format
+        def fmt(val):
+            # Convert bits/sec to readable format
+            # Val dari CSV biasanya bits per second (default Cacti)
+            # Tapi user minta output "M" (Mega) atau "K". Format Excel AutoData sepertinya text "68.9 M"
+            
+            if val is None: return "0.00"
+            
+            # Cacti store raw bits.
+            # Logic GUI lama: "Parse nilai bandwidth dari teks 63.98 M"
+            # Logic baru: Kita punya raw float. Kita harus format jadi string mirip Cacti UI
+            
+            # Auto scale
+            abs_val = abs(val)
+            if abs_val >= 1e9:
+                return f"{val/1e9:.2f} G"
+            elif abs_val >= 1e6:
+                return f"{val/1e6:.2f} M"
+            elif abs_val >= 1e3:
+                return f"{val/1e3:.2f} K"
+            else:
+                return f"{val:.2f}"
+
+        # Calculate Stats
+        # Current = Last value
+        curr_in = in_values[-1] if in_values else 0
+        curr_out = out_values[-1] if out_values else 0
+        
+        # Average
+        avg_in = sum(in_values) / len(in_values) if in_values else 0
+        avg_out = sum(out_values) / len(out_values) if out_values else 0
+        
+        # Max
+        max_in = max(in_values) if in_values else 0
+        max_out = max(out_values) if out_values else 0
+        
+        return {
+            "curr_in": fmt(curr_in),
+            "avg_in": fmt(avg_in),
+            "max_in": fmt(max_in),
+            "curr_out": fmt(curr_out),
+            "avg_out": fmt(avg_out),
+            "max_out": fmt(max_out),
+        }
     
     def scrape_date_range(self, start_date: datetime, end_date: datetime) -> List[Dict]:
         """
@@ -311,11 +523,24 @@ class CactiScraper:
                 # Set filter waktu
                 self.set_time_filter(current_date, hour, minute)
                 
-                # Tunggu sebentar untuk data dimuat
+                # Hitung timestamp untuk URL export
+                # Cacti butuh Unix timestamp
+                # Strategi: Selalu ambil dari jam 00:00 sampai jam target
+                # Ini mensimulasikan "Graph View" harian
+                from_dt = current_date.replace(hour=0, minute=0, second=0)
+                to_dt = current_date.replace(hour=hour, minute=minute, second=0)
+                
+                start_ts = int(from_dt.timestamp())
+                end_ts = int(to_dt.timestamp())
+                
+                # Tambahkan buffer 5 menit ke end_ts untuk memastikan data jam 16:00 masuk (inclusive)
+                # Cacti kadang memotong pas di detik akhir
+                end_ts += 300 
+                
                 time.sleep(config.ACTION_DELAY)
                 
-                # Ekstrak data
-                graph_data = self.extract_graph_data()
+                # Ekstrak data dengan timestamp eksplisit
+                graph_data = self.extract_graph_data(start_ts, end_ts)
                 
                 # Simpan dengan metadata tanggal/waktu
                 for interface_name, data in graph_data.items():
@@ -333,6 +558,86 @@ class CactiScraper:
         
         self._update_progress(f"Selesai mengambil {len(all_data)} data!", 85)
         return all_data
+
+    def _calculate_stats_from_csv(self, rows: List[List[str]], header: List[str]) -> Dict:
+        """
+        Hitung statistik (Current/Avg/Max) dari data mentah CSV
+        
+        Args:
+           rows: List of data rows
+           header: Header row (untuk deteksi kolom)
+        """
+        if not rows or not header:
+             return None
+
+        # 1. Deteksi Kolom In/Out
+        idx_in = -1
+        idx_out = -1
+        
+        # Cari kolom dengan kata kunci (biasanya "Traffic - In" atau "Inbound")
+        for i, col in enumerate(header):
+            col_lower = col.lower()
+            if "traffic_in" in col_lower or "inbound" in col_lower:
+                idx_in = i
+            elif "traffic_out" in col_lower or "outbound" in col_lower:
+                idx_out = i
+        
+        # Fallback jika tidak menemukan nama spesifik (Cacti standard: 1=In, 2=Out, atau 1=In, 3=Out)
+        # Ingat kolom 0 adalah Date
+        if idx_in == -1 and len(header) > 1: idx_in = 1
+        if idx_out == -1 and len(header) > 2: 
+            # Jika kolom 2 sepertinya bukan duplicate dari In (kadang format In, In_d, Out...)
+            idx_out = 2 if len(header) == 3 else 3
+            if idx_out >= len(header): idx_out = -1
+
+        in_values = []
+        out_values = []
+        
+        for row in rows:
+            try:
+                # Parse In
+                if idx_in != -1 and idx_in < len(row):
+                    val = row[idx_in]
+                    if val and val != 'NaN':
+                        # Cacti CSV exports bits/sec in this setup (confirmed by user data magnitude)
+                        in_values.append(float(val)) 
+                
+                # Parse Out
+                if idx_out != -1 and idx_out < len(row):
+                    val = row[idx_out]
+                    if val and val != 'NaN':
+                        out_values.append(float(val))
+            except ValueError:
+                continue
+                
+        # Helper format
+        def fmt(val):
+            if val is None: return "0.00"
+            abs_val = abs(val)
+            if abs_val >= 1e9:   return f"{val/1e9:.2f} G"
+            elif abs_val >= 1e6: return f"{val/1e6:.2f} M"
+            elif abs_val >= 1e3: return f"{val/1e3:.2f} K"
+            else:                return f"{val:.2f}"
+
+        # Calculate Stats (Current = Last, Avg = Mean, Max = Peak)
+        curr_in = in_values[-1] if in_values else 0
+        curr_out = out_values[-1] if out_values else 0
+        
+        avg_in = sum(in_values) / len(in_values) if in_values else 0
+        avg_out = sum(out_values) / len(out_values) if out_values else 0
+        
+        max_in = max(in_values) if in_values else 0
+        max_out = max(out_values) if out_values else 0
+        
+        return {
+            "curr_in": fmt(curr_in),
+            "avg_in": fmt(avg_in),
+            "max_in": fmt(max_in),
+            "curr_out": fmt(curr_out),
+            "avg_out": fmt(avg_out),
+            "max_out": fmt(max_out),
+        }
+
 
 
 def run_scraper(start_date: datetime, end_date: datetime, 

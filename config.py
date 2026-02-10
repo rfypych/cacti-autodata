@@ -6,15 +6,17 @@
 # ============================================================
 
 # URL Cacti (sesuaikan dengan URL kantor)
-CACTI_URL = "http://monitor.kabngawi.id/cacti/graph_view.php"
+# Halaman yang menampilkan 4 chart: LocalNet, iForte, Telkom, Moratel
+CACTI_URL = "https://monitor.kabngawi.id/cacti/graph_view.php?action=tree&node=tbranch-169&host_id=101&site_id=-1&host_template_id=-1&hgd=&hyper=true&rfilter="
 
 # Mapping interface Cacti ke nama sheet Excel
 # Key = teks yang muncul di judul graph Cacti
 # Value = nama sheet di Excel (harus persis sama, case-sensitive)
 INTERFACE_TO_SHEET = {
-    "ether4-iForte": "iForte",
-    "ether5-Telkom": "Telkom",
-    "ether6-Moratel": "Moratel",
+    "LocalNet": "LocalNet", # Was ether2-LocalNet
+    "iForte": "iForte",     # Was ether4-iForte
+    "Telkom": "Telkom",     # Was ether5-Telkom
+    "Moratel": "Moratel",   # Was ether6-Moratel
 }
 
 # Slot waktu yang akan diambil datanya
