@@ -264,14 +264,17 @@ class CactiScraper:
         
         try:
             # 1. Tunggu graph dimuat untuk memastikan page render
-            WebDriverWait(self.driver, config.PAGE_LOAD_TIMEOUT).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div[id*='wrapper_']"))
-            )
+            try:
+                WebDriverWait(self.driver, config.PAGE_LOAD_TIMEOUT).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "div[id*='wrapper_'], div[id*='graph_']"))
+                )
+            except:
+                self._update_progress("Warning: Timeout menunggu graph, mencoba lanjut...")
             
-            # 2. Cari semua graph ID (wrapper_1234)
+            # 2. Cari semua graph ID (wrapper_1234 atau graph_1234)
             page_source = self.driver.page_source
-            # Pattern: id="wrapper_1730"
-            graph_ids = re.findall(r'id=["\']wrapper_(\d+)["\']', page_source)
+            # Pattern: id="wrapper_1730" atau id="graph_1503"
+            graph_ids = re.findall(r'id=["\'](?:wrapper|graph)_(\d+)["\']', page_source)
             # Filter duplicates
             unique_graph_ids = list(set(graph_ids))
             
@@ -351,8 +354,8 @@ class CactiScraper:
         xport_url = base_url.replace('graph_view.php', 'graph_xport.php')
         
         # Construct clean URL
-        # rra_id=1 typical for Daily (5 Min Average) high res
-        url = f"{xport_url}?local_graph_id={graph_id}&rra_id=1&view_type=tree"
+        # rra_id=0 = auto-select (Cacti pilih resolusi terbaik sesuai time range)
+        url = f"{xport_url}?local_graph_id={graph_id}&rra_id=0&view_type=tree"
         
         # Append specific time range if provided
         if start_ts > 0 and end_ts > 0:
@@ -368,7 +371,9 @@ class CactiScraper:
             
             # Parse CSV Content
             content = resp.text
-            # self._update_progress(f"    [DEBUG] Raw Content: {repr(content[:50])}...", -1)
+            # Strip BOM (Byte Order Mark) jika ada
+            if content.startswith('\ufeff'):
+                content = content[1:]
             
             f = StringIO(content)
             reader = csv.reader(f)
@@ -405,88 +410,7 @@ class CactiScraper:
             self._update_progress(f"Error parsing CSV ID {graph_id}: {str(e)}", -1)
             return None
 
-    def _calculate_stats_from_csv(self, rows: List[List[str]]) -> Dict:
-        """Hitung statistik (Current/Avg/Max) dari data mentah CSV"""
-        # Mapping kolom: biasanya col 1 & 3 adalah In & Out (setelah date)
-        # Tapi header bisa: Date, col, Inbound, col, Outbound
-        # Kita perlu cari index kolom yang valid
-        
-        # Sederhana: ambil 2 kolom numerik pertama yang kita temukan pada data row terakhir valid
-        # Namun, kita butuh AVG val, MAX val, CURR val. 
-        # CSV export (xport) Cacti "Daily" memberikan data per 5 menit (series).
-        # Jadi kita harus hitung manual:
-        # Current = Baris terakhir (atau rata-rata beberapa baris terakhir)
-        # Average = Rata-rata seluruh baris
-        # Max = Nilai maksimum seluruh baris
-        
-        in_values = []
-        out_values = []
-        
-        for row in rows:
-            # row[0] is Date
-            # row[1]... are values. Some might be NaN.
-            # Berdasarkan sampel: 
-            # Date, col12(InVal), Inbound(InVal), col14(OutVal), Outbound(OutVal)
-            # Jadi index 1 dan 3 (0-based: 1, 3) adalah raw val
-            
-            try:
-                # Kolom 1 biasanya Inbound (jika format standar)
-                # Parse float
-                val_in = float(row[1]) if row[1] and row[1] != 'NaN' else 0.0
-                in_values.append(val_in)
-                
-                # Kolom 3 biasanya Outbound
-                # Cacti row length sample: 7 items (Date, val1, val1_rpt, val2, val2_rpt, ...)
-                if len(row) > 3:
-                     val_out = float(row[3]) if row[3] and row[3] != 'NaN' else 0.0
-                     out_values.append(val_out)
-            except (ValueError, IndexError):
-                continue
-                
-        # Helper format
-        def fmt(val):
-            # Convert bits/sec to readable format
-            # Val dari CSV biasanya bits per second (default Cacti)
-            # Tapi user minta output "M" (Mega) atau "K". Format Excel AutoData sepertinya text "68.9 M"
-            
-            if val is None: return "0.00"
-            
-            # Cacti store raw bits.
-            # Logic GUI lama: "Parse nilai bandwidth dari teks 63.98 M"
-            # Logic baru: Kita punya raw float. Kita harus format jadi string mirip Cacti UI
-            
-            # Auto scale
-            abs_val = abs(val)
-            if abs_val >= 1e9:
-                return f"{val/1e9:.2f} G"
-            elif abs_val >= 1e6:
-                return f"{val/1e6:.2f} M"
-            elif abs_val >= 1e3:
-                return f"{val/1e3:.2f} K"
-            else:
-                return f"{val:.2f}"
-
-        # Calculate Stats
-        # Current = Last value
-        curr_in = in_values[-1] if in_values else 0
-        curr_out = out_values[-1] if out_values else 0
-        
-        # Average
-        avg_in = sum(in_values) / len(in_values) if in_values else 0
-        avg_out = sum(out_values) / len(out_values) if out_values else 0
-        
-        # Max
-        max_in = max(in_values) if in_values else 0
-        max_out = max(out_values) if out_values else 0
-        
-        return {
-            "curr_in": fmt(curr_in),
-            "avg_in": fmt(avg_in),
-            "max_in": fmt(max_in),
-            "curr_out": fmt(curr_out),
-            "avg_out": fmt(avg_out),
-            "max_out": fmt(max_out),
-        }
+    # (old duplicate _calculate_stats_from_csv removed - active version is below)
     
     def scrape_date_range(self, start_date: datetime, end_date: datetime) -> List[Dict]:
         """
@@ -525,17 +449,14 @@ class CactiScraper:
                 
                 # Hitung timestamp untuk URL export
                 # Cacti butuh Unix timestamp
-                # Strategi: Selalu ambil dari jam 00:00 sampai jam target
-                # Ini mensimulasikan "Graph View" harian
+                # Strategi: 00:00 sampai jam target (per-slot)
+                # 09:00 slot → 00:00-09:05, 16:00 slot → 00:00-16:05
+                # Nilai Current/Average/Maximum dihitung sesuai range slot
                 from_dt = current_date.replace(hour=0, minute=0, second=0)
                 to_dt = current_date.replace(hour=hour, minute=minute, second=0)
                 
                 start_ts = int(from_dt.timestamp())
-                end_ts = int(to_dt.timestamp())
-                
-                # Tambahkan buffer 5 menit ke end_ts untuk memastikan data jam 16:00 masuk (inclusive)
-                # Cacti kadang memotong pas di detik akhir
-                end_ts += 300 
+                end_ts = int(to_dt.timestamp()) + 300  # +5 menit buffer agar data jam target masuk
                 
                 time.sleep(config.ACTION_DELAY)
                 
