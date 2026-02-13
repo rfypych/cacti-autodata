@@ -125,14 +125,25 @@ class ExcelWriter:
             dummy_dt = datetime(2000, 1, 1, target_hour, target_minute)
             target_time_compare = dummy_dt.strftime(config.TIME_FORMAT_EXCEL)
         
+        last_valid_date_str = ""
+        
         for row in range(config.EXCEL_DATA_START_ROW, sheet.max_row + 1):
             date_cell = sheet.cell(row=row, column=config.EXCEL_COL_TANGGAL).value
             time_cell = sheet.cell(row=row, column=config.EXCEL_COL_WAKTU).value
             
-            date_str = self._cell_to_date_string(date_cell)
+            # Konversi nilai cell ke string untuk perbandingan
+            current_date_str = self._cell_to_date_string(date_cell)
+            
+            # Handle implicit date (merged cells / empty cell means same as above)
+            if not current_date_str and last_valid_date_str:
+                current_date_str = last_valid_date_str
+            elif current_date_str:
+                last_valid_date_str = current_date_str
+            
             time_str = self._cell_to_time_string(time_cell)
             
-            if date_str == target_date_str and time_str == target_time_compare:
+            # Bandingkan
+            if current_date_str == target_date_str and time_str == target_time_compare:
                 return row
         
         return None

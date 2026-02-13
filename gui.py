@@ -269,14 +269,18 @@ class CactiAutoDataGUI:
         mapping_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.mapping_vars = {}
-        current_mapping = self.settings.get("interface_mapping", config.INTERFACE_TO_SHEET)
+        current_mapping = self.settings.get("interface_mapping", {})
         
-        for i, (interface, sheet) in enumerate(current_mapping.items()):
+        # Use keys from config to ensure all interfaces are shown
+        for interface, default_sheet in config.INTERFACE_TO_SHEET.items():
+            # Get saved sheet name or default from config
+            sheet_val = current_mapping.get(interface, default_sheet)
+            
             row_frame = ttk.Frame(mapping_frame)
             row_frame.pack(fill=tk.X, pady=2)
             
             ttk.Label(row_frame, text=f"{interface} →", width=20).pack(side=tk.LEFT)
-            var = tk.StringVar(value=sheet)
+            var = tk.StringVar(value=sheet_val)
             self.mapping_vars[interface] = var
             ttk.Entry(row_frame, textvariable=var, width=15).pack(side=tk.LEFT, padx=5)
         

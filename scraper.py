@@ -535,9 +535,16 @@ class CactiScraper:
                     if val and val != 'NaN':
                         # Cacti CSV exports bits/sec in this setup (confirmed by user data magnitude)
                         in_values.append(float(val)) 
+                    elif val == 'NaN':
+                        in_values.append(0.0) 
                 
                 # Parse Out
                 if idx_out != -1 and idx_out < len(row):
+                    val = row[idx_out]
+                    if val and val != 'NaN':
+                        out_values.append(float(val))
+                    elif val == 'NaN':
+                        out_values.append(0.0)
                     val = row[idx_out]
                     if val and val != 'NaN':
                         out_values.append(float(val))
