@@ -173,8 +173,14 @@ class ExcelWriter:
     def write_data_to_row(self, sheet: Worksheet, row: int, data: Dict):
         """Tulis data ke baris (update atau baru)"""
         # Pastikan tanggal dan waktu ditulis juga (penting untuk baris baru)
-        sheet.cell(row=row, column=config.EXCEL_COL_TANGGAL, 
-                  value=data['date'].strftime(config.DATE_FORMAT_EXCEL))
+        try:
+            sheet.cell(row=row, column=config.EXCEL_COL_TANGGAL, 
+                      value=data['date'].strftime(config.DATE_FORMAT_EXCEL))
+        except AttributeError:
+            # Error: 'MergedCell' object attribute 'value' is read-only
+            # Ini terjadi jika cell tanggal di-merge dengan baris sebelumnya.
+            # Kita skip saja karena tanggal sudah ada di cell utama merge.
+            pass
         
         time_display = f"{data['time_hour']:02d}.{data['time_minute']:02d}"
         if config.TIME_FORMAT_EXCEL:
