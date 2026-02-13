@@ -440,6 +440,11 @@ class CactiScraper:
         
         current_date = start_date
         while current_date <= end_date:
+            # Skip weekend if configured
+            if config.SKIP_WEEKENDS and current_date.weekday() >= 5: # 5=Sat, 6=Sun
+                current_date += timedelta(days=1)
+                continue
+
             for hour, minute in config.TIME_SLOTS:
                 current_iteration += 1
                 progress = 15 + int((current_iteration / total_iterations) * 70)
@@ -636,6 +641,17 @@ class CactiScraper:
         
         current_date = start_date
         while current_date <= end_date:
+            # Skip weekend if configured
+            if config.SKIP_WEEKENDS and current_date.weekday() >= 5: # 5=Sat, 6=Sun
+                # Update progress for skipped days
+                skipped_iterations = len(config.TIME_SLOTS) * len(config.GRAPH_IDS)
+                current_iteration += skipped_iterations
+                
+                self._update_progress(f"📅 {current_date.strftime('%d/%m/%Y')} adalah Weekend (Skip)", -1)
+                
+                current_date += timedelta(days=1)
+                continue
+
             for hour, minute in config.TIME_SLOTS:
                 time_str = f"{hour:02d}:{minute:02d}"
                 date_str = current_date.strftime(config.DATE_FORMAT_EXCEL)
