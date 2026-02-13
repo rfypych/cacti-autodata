@@ -328,7 +328,7 @@ class CactiAutoDataGUI:
         info_label.pack(anchor=tk.W, pady=(0, 10))
         
         # Preview table
-        columns = ("Sheet", "Tanggal", "Waktu", "Curr IN", "Curr OUT", "Max IN", "Max OUT", "Avg IN", "Avg OUT", "Status")
+        columns = ("Interface", "Sheet", "Tanggal", "Waktu", "Curr IN", "Curr OUT", "Max IN", "Max OUT", "Avg IN", "Avg OUT", "Status")
         
         tree_frame = ttk.Frame(self.preview_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True)
@@ -336,11 +336,15 @@ class CactiAutoDataGUI:
         self.preview_tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=15)
         
         # Configure columns
-        col_widths = {"Sheet": 60, "Tanggal": 80, "Waktu": 50, "Status": 80}
+        col_widths = {
+            "Interface": 80, "Sheet": 80, "Tanggal": 80, "Waktu": 50, 
+            "Status": 80, "Curr IN": 70, "Curr OUT": 70, 
+            "Max IN": 70, "Max OUT": 70, "Avg IN": 70, "Avg OUT": 70
+        }
         for col in columns:
             self.preview_tree.heading(col, text=col)
             width = col_widths.get(col, 65)
-            self.preview_tree.column(col, width=width, minwidth=50)
+            self.preview_tree.column(col, width=width, minwidth=50, anchor="center")
         
         # Scrollbars
         vsb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.preview_tree.yview)
@@ -497,12 +501,21 @@ class CactiAutoDataGUI:
     
     def _browse_excel(self):
         """Browse for Excel file"""
-        file_path = filedialog.askopenfilename(
-            title="Select Excel File",
-            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+        # Default to results directory
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        results_dir = os.path.join(base_dir, "results")
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+            
+        filename = filedialog.asksaveasfilename(
+            initialdir=results_dir,
+            title="Save Excel File",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+            defaultextension=".xlsx",
+            initialfile=f"Cacti_Data_{datetime.now().strftime('%Y%m%d')}.xlsx"
         )
-        if file_path:
-            self.excel_path_var.set(file_path)
+        if filename:
+            self.excel_path_var.set(filename)
     
     def _log(self, message: str):
         """Add message to log"""
@@ -560,8 +573,8 @@ class CactiAutoDataGUI:
             return False
         
         if not self.excel_path_var.get() and not self.dry_run_var.get():
-            messagebox.showerror("Error", get_text("error_no_file", lang))
-            return False
+            # Auto-generate path if empty
+            pass # Allowed now, will be generated in _start_process
         
         # Check at least one sheet selected
         if not any(var.get() for var in self.sheet_vars.values()):
@@ -597,6 +610,18 @@ class CactiAutoDataGUI:
         start_date = datetime.strptime(self.start_date_var.get(), "%d/%m/%Y")
         end_date = datetime.strptime(self.end_date_var.get(), "%d/%m/%Y")
         excel_path = self.excel_path_var.get()
+        
+        # Auto-generate filename if empty
+        if not excel_path and not self.dry_run_var.get():
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            results_dir = os.path.join(base_dir, "results")
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            
+            filename = f"Cacti_Data_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
+            excel_path = os.path.join(results_dir, filename)
+            self.excel_path_var.set(excel_path)
+            self._log(f"📁 Auto-generated file: {filename}")
         
         thread = threading.Thread(
             target=self._run_scraping_thread,
@@ -692,7 +717,8 @@ class CactiAutoDataGUI:
         
         for item in data:
             values = (
-                item.get('sheet', ''),
+                item.get('interface', ''),
+                item.get('sheet') or '-', # Fallback to '-' if None
                 item.get('date', '').strftime('%d/%m/%Y') if item.get('date') else '',
                 f"{item.get('time_hour', 0):02d}.{item.get('time_minute', 0):02d}",
                 item.get('curr_in', ''),
