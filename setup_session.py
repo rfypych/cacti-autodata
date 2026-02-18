@@ -1,58 +1,120 @@
 
 import json
 import os
-import sys
+import time
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
-def setup():
-    print("\n=== Cacti Session Setup Wizard ===")
-    print("Gunakan script ini jika Anda tidak memiliki Username/Password Cacti,")
-    print("TAPI Anda sudah login di browser laptop Anda sekarang.")
-    print("-" * 50)
-    
-    print("\nLangkah 1: Buka Cacti di browser Chrome/Firefox Anda yang SUDAH LOGIN.")
-    print("Langkah 2: Tekan F12, pergi ke tab 'Application' (Chrome) atau 'Storage' (Firefox).")
-    print("Langkah 3: Di menu kiri, pilih 'Cookies' > 'https://monitor.kabngawi.id'.")
-    print("Langkah 4: Cari cookie dengan nama 'Cacti' atau 'PHPSESSID'.")
-    print("Langkah 5: Klik 2x pada kolom 'Value', lalu Copy semuanya.")
-    
-    print("\n\n(Jika Anda bingung, nilai cookie biasanya berupa deretan huruf acak panjang seperti: n8234n2348n234...)")
-    cookie_value = input("\n>> Paste VALUE cookie di sini: ").strip()
-    
-    if not cookie_value:
-        print("\n❌ Error: Cookie tidak boleh kosong!")
-        return
+class SessionManager:
+    def __init__(self):
+        self.driver = None
+        self.cookies_file = "cacti_cookies.json"
+
+    def open_browser(self, url: str):
+        """Membuka browser untuk login manual"""
+        print(f"Opening browser to {url}...")
         
-    # Konfirmasi nama cookie (default Cacti)
-    cookie_name = "Cacti"
-    print(f"\nDefault nama cookie adalah '{cookie_name}'.")
-    choice = input("Apakah nama cookie di browser Anda berbeda? (y/n): ").lower()
-    if choice == 'y':
-        cookie_name = input(">> Masukkan nama cookie yang benar (contoh: PHPSESSID): ").strip()
-    
-    # Create simple cookie structure
-    cookies = [
-        {
-            "domain": "monitor.kabngawi.id",
-            "name": cookie_name,
-            "value": cookie_value,
-            "path": "/",
-            "secure": False,
-            "httpOnly": True
-        }
-    ]
-    
-    # Save to current directory
-    filename = "cacti_cookies.json"
-    try:
-        with open(filename, "w") as f:
-            json.dump(cookies, f, indent=2)
+        chrome_options = Options()
+        chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        
+        # Disable automation bars to look cleaner
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        try:
+            self.driver = webdriver.Chrome(options=chrome_options)
+            self.driver.get(url)
+            return True
+        except Exception as e:
+            print(f"Failed to open browser: {e}")
+            return False
+
+    def save_cookies(self):
+        """Menyimpan cookies dari driver ke file json"""
+        if not self.driver:
+            return False, "Browser belum dibuka"
             
-        print(f"\n✅ BERHASIL! Cookie disimpan ke '{filename}'")
-        print("Sekarang coba jalankan 'python main.py' lagi.")
-        print("Program akan otomatis menggunakan sesi ini.")
+        try:
+            cookies = self.driver.get_cookies()
+            if not cookies:
+                return False, "Tidak ada cookie ditemukan. Apakah Anda sudah login?"
+            
+            # Filter cookies standard
+            formatted_cookies = []
+            for c in cookies:
+                formatted_cookies.append({
+                    "domain": c.get("domain"),
+                    "name": c.get("name"),
+                    "value": c.get("value"),
+                    "path": c.get("path", "/"),
+                    "secure": c.get("secure", False),
+                    "httpOnly": c.get("httpOnly", False)
+                })
+                
+            with open(self.cookies_file, "w") as f:
+                json.dump(formatted_cookies, f, indent=2)
+                
+            return True, f"Berhasil menyimpan {len(cookies)} cookies ke {self.cookies_file}"
+            
+        except Exception as e:
+            return False, str(e)
+
+    def save_cookie_manual(self, cookie_value: str, cookie_name: str = "Cacti", domain: str = "monitor.kabngawi.id"):
+        """Menyimpan cookie dari input manual string"""
+        if not cookie_value:
+            return False, "Value cookie kosong"
+            
+        try:
+            cookies = [{
+                "domain": domain,
+                "name": cookie_name,
+                "value": cookie_value,
+                "path": "/",
+                "secure": False,
+                "httpOnly": True
+            }]
+            
+            with open(self.cookies_file, "w") as f:
+                json.dump(cookies, f, indent=2)
+                
+            return True, f"Berhasil menyimpan cookie ke {self.cookies_file}"
+            
+        except Exception as e:
+            return False, str(e)
+
+    def close_browser(self):
+        """Menutup browser"""
+        if self.driver:
+            try:
+                self.driver.quit()
+            except:
+                pass
+            self.driver = None
+
+def setup_standalone():
+    """Fungsi standalone untuk dijalankan via CLI"""
+    # Load config to get URL (optional, or ask user)
+    try:
+        import config
+        url = config.CACTI_URL
+    except:
+        url = input("Masukkan URL Cacti: ").strip()
         
-    except Exception as e:
-        print(f"\n❌ Gagal menyimpan file: {e}")
+    manager = SessionManager()
+    if manager.open_browser(url):
+        print("\nBrowser telah terbuka.")
+        print("Silakan LOGIN ke Cacti di browser tersebut.")
+        print("Jika sudah berhasil login, kembali ke sini lalu tekan ENTER.")
+        input(">> Tekan ENTER untuk menyimpan cookie...")
+        
+        success, msg = manager.save_cookies()
+        print(f"\n{msg}")
+        
+        manager.close_browser()
+    else:
+        print("Gagal membuka browser. Pastikan Chrome terinstall.")
 
 if __name__ == "__main__":
-    setup()
+    setup_standalone()

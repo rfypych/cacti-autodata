@@ -12,13 +12,14 @@ Antarmuka grafis untuk Cacti AutoData dengan fitur lengkap:
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 from datetime import datetime, timedelta
 import threading
 import queue
 import webbrowser
 import os
 from typing import Optional, Dict, List
+from setup_session import SessionManager
 
 import config
 from scraper import run_scraper
@@ -261,7 +262,24 @@ class CactiAutoDataGUI:
         url_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.url_var = tk.StringVar(value=self.settings.get("cacti_url", config.CACTI_URL))
-        ttk.Entry(url_frame, textvariable=self.url_var, width=60).pack(fill=tk.X)
+        ttk.Entry(url_frame, textvariable=self.url_var, width=60).pack(fill=tk.X, pady=(0, 5))
+        
+        # Login Button
+        login_frame = ttk.Frame(url_frame)
+        login_frame.pack(fill=tk.X)
+        
+        ttk.Label(login_frame, text="Cookie expired?").pack(side=tk.LEFT)
+        ttk.Button(
+            login_frame, 
+            text="🔑 Login / Update Session", 
+            command=self._run_login_session
+        ).pack(side=tk.LEFT, padx=10)
+        
+        ttk.Button(
+            login_frame,
+            text="❓ Cara ambil cookie",
+            command=self._show_cookie_help
+        ).pack(side=tk.LEFT)
         
         # Time Format
         time_frame = ttk.LabelFrame(self.settings_frame, text="⏰ Time Format in Excel", padding="10")
@@ -960,6 +978,66 @@ class CactiAutoDataGUI:
         self._update_progress(get_text("status_stopped", self.current_lang))
         messagebox.showwarning("Info", get_text("stop_warning", self.current_lang))
     
+    def _run_login_session(self):
+        """Run manual session update (Paste Cookie)"""
+        url = self.url_var.get()
+        if not url:
+            messagebox.showerror("Error", "URL Cacti belum diisi!")
+            return
+            
+        # Extract domain from URL for cleaner cookie saving
+        from urllib.parse import urlparse
+        try:
+            domain = urlparse(url).netloc
+        except:
+            domain = "monitor.kabngawi.id"
+
+        # Show instructions
+        msg = (
+            "Karena login otomatis memerlukan username/password,\n"
+            "metode paling aman adalah menyalin sesi dari browser Anda sendiri.\n\n"
+            "Langkah-langkah:\n"
+            "1. Buka Cacti di browser Chrome/Edge Anda (pastikan sudah login).\n"
+            "2. Tekan F12 -> ke tab 'Application' -> 'Cookies'.\n"
+            "3. Cari cookie bernama 'Cacti' atau 'PHPSESSID'.\n"
+            "4. Copy isinya (deretan huruf acak panjang).\n\n"
+            "Klik OK untuk menempelkan (Paste) cookie tersebut."
+        )
+        
+        if messagebox.askokcancel("Update Sesi Manual", msg):
+            cookie_value = simpledialog.askstring(
+                "Input Cookie", 
+                "Paste Value Cookie di sini:",
+                parent=self.root
+            )
+            
+            if cookie_value:
+                manager = SessionManager()
+                success, result_msg = manager.save_cookie_manual(
+                    cookie_value.strip(), 
+                    domain=domain
+                )
+                
+                if success:
+                    messagebox.showinfo("Sukses", "Sesi berhasil disimpan!\nSilakan coba scraping lagi.")
+                else:
+                    messagebox.showerror("Gagal", f"Gagal menyimpan sesi:\n{result_msg}")
+
+    def _show_cookie_help(self):
+        """Show guide for getting cookies"""
+        msg = (
+            "LANGKAH-LANGKAH MENDAPATKAN COOKIE:\n\n"
+            "1. Buka Cacti di browser (Chrome/Edge/Firefox) dan pastikan sudah LOGIN.\n"
+            "2. Tekan tombol F12 pada keyboard untuk membuka Developer Tools.\n"
+            "3. Cari tab bernama 'Application' (di Chrome/Edge) atau 'Storage' (di Firefox).\n"
+            "   (Jika tidak terlihat, klik tanda panah '>>' di menu atas DevTools)\n"
+            "4. Di menu kiri, buka bagian 'Cookies' lalu klik URL Cacti.\n"
+            "5. Cari cookie dengan nama 'Cacti' atau 'PHPSESSID'.\n"
+            "6. Klik 2x pada kolom 'Value' cookie tersebut, lalu Copy (Ctrl+C).\n"
+            "7. Kembali ke aplikasi ini, klik 'Login / Update Session', lalu Paste (Ctrl+V).\n"
+        )
+        messagebox.showinfo("Cara Ambil Cookie", msg)
+
     def _show_help(self):
         """Show improved help window with multiple sections"""
         lang = self.current_lang

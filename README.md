@@ -1,127 +1,135 @@
-# 🌵 Cacti AutoData
+# 🌵 Cacti AutoData Scraper
 
-Automatically record bandwidth data from Cacti monitoring system to Excel spreadsheet.
+Aplikasi otomasi untuk mengambil data bandwidth dari Cacti monitoring system dan merekapnya ke dalam format laporan Excel secara otomatis.
 
-## 📋 Description
+![App Screenshot](https://via.placeholder.com/800x400?text=Cacti+AutoData+GUI)
 
-This tool is designed to help with bandwidth data recording tasks from Cacti monitoring system to Excel. The program will:
+## ✨ Fitur Utama
 
-1. Open a browser and access the Cacti page
-2. Change the time filter according to the input date
-3. Extract Current, Maximum, and Average values for Inbound/Outbound
-4. Fill the data into an existing Excel file (matching date and time)
+- **🚀 GUI Modern & Mudah**: Antarmuka grafis yang user-friendly dengan tema modern.
+- **⚡ Fast Scraping Mode**: Menggunakan metode `requests` langsung (bukan Selenium) untuk kecepatan maksimal.
+- **📊 Excel Otomatis**:
+  - Menulis data ke file Excel yang sudah ada atau membuat baru.
+  - Mendukung format laporan standar (Tanggal, Waktu, In/Out Current, Max, Avg).
+  - **Smart Append**: Menambah baris baru tanpa merusak data lama.
+  - **Status Preview**: Melihat status data sebelum ditulis (New, Updated, Skipped).
+  - **Sheet Metadata**: Menyimpan info eksekusi (User, Waktu, URL) di sheet terpisah.
+- **🛡️ Data Safety**:
+  - **Retry Mechanism**: Jika file Excel sedang terbuka saat penyimpanan, program akan meminta konfirmasi Retry (tidak langsung error/crash).
+  - **Skip Filled Rows**: Opsi untuk melewati baris yang sudah terisi agar tidak menimpa data manual.
+- **🔧 Fleksibilitas**:
+  - **Interface Mapping**: Bebas memetakan nama Interface Cacti ke nama Sheet Excel.
+  - **Date Picker**: Memilih rentang tanggal dengan mudah.
+  - **Skip Weekend**: Opsi otomatis melewati hari Sabtu & Minggu.
 
-## 🚀 Installation
+## 🛠️ Persyaratan Sistem
 
-### 1. Install Python
+- Windows / Linux / MacOS
+- Python 3.8 atau lebih baru
+- Google Chrome (untuk pengambilan cookie awal)
+- Akses jaringan ke server Cacti (VPN jika diperlukan)
 
-Download and install Python 3.8+ from [python.org](https://www.python.org/downloads/)
+## 📦 Instalasi
 
-> ⚠️ During installation, check ✅ **"Add Python to PATH"**
+1. **Clone Repository**
+   ```bash
+   git clone https://github.com/username/cacti-autodata.git
+   cd cacti-autodata
+   ```
 
-### 2. Install Dependencies
+2. **Buat Virtual Environment (Opsional tapi Disarankan)**
+   ```bash
+   python -m venv venv
+   # Aktifkan venv:
+   # Windows:
+   venv\Scripts\activate
+   # Linux/Mac:
+   source venv/bin/activate
+   ```
 
-Open Command Prompt in the project folder, then run:
+3. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-pip install -r requirements.txt
-```
+## ⚙️ Konfigurasi Awal
 
-### 3. Install Chrome Browser
+1. **Siapkan File Config**
+   Salin `config.example.py` menjadi `config.py`:
+   ```bash
+   cp config.example.py config.py
+   ```
 
-Make sure Google Chrome is installed on the computer.
+2. **Edit `config.py`**
+   Sesuaikan variabel berikut dengan lingkungan Anda:
+   - `CACTI_URL`: URL halaman Graph View Cacti Anda.
+   - `INTERFACE_TO_SHEET`: Mapping nama interface di Cacti ke nama Sheet di Excel.
+   - `TIME_SLOTS`: Jam berapa saja data diambil (Default: 09:00 dan 16:00).
 
-## 📖 Usage
+3. **Ambil Cookie Login (Satu Kali Saja)**
+   - Buka aplikasi GUI (`python gui.py`).
+3. **Ambil Cookie Login (Satu Kali Saja)**
+   - Buka aplikasi GUI (`python gui.py`).
+   - Masuk ke tab **Settings**.
+   - Klik tombol **Login / Update Session**.
+   - Ikuti petunjuk di layar:
+     1. Buka Cacti di browser Anda (Chrome/Edge).
+     2. Tekan F12 > Application > Cookies.
+     3. Copy value dari cookie `Cacti` atau `PHPSESSID`.
+     4. Paste ke kolom di aplikasi.
+   - Selesai! Cookie tersimpan otomatis.
 
-### 1. Run the Program
+## 🚀 Cara Penggunaan
 
-```bash
-python main.py
-```
+1. **Jalankan Aplikasi GUI**
+   ```bash
+   python gui.py
+   ```
 
-### 2. In the GUI Window:
+2. **Langkah-langkah di Aplikasi**:
+   - **Pilih File Excel**: Klik "Browse" untuk memilih file laporan bulanan (xlsx).
+   - **Pilih Tanggal**: Tentukan Tanggal Mulai dan Tanggal Akhir.
+   - **Interface Map**: Centang interface mana saja yang ingin diambil datanya.
+   - **Settings (Opsional)**:
+     - *Skip Weekend*: Lewati Sabtu/Minggu.
+     - *Include Metadata*: Tambahkan sheet info timestamp/user.
+     - *Skip Filled Rows*: Jangan timpa baris yang sudah ada isinya.
+   - **Klik START**: Proses scraping akan berjalan.
 
-1. Fill in **Start Date** and **End Date** (format: DD/MM/YYYY)
-2. Click **Browse** to select the Excel file from the office
-3. Click **🚀 Start Recording**
-4. Wait until the process is complete
+3. **Monitor Proses**:
+   - Lihat progress bar dan log aktivitas di bagian bawah.
+   - Tab **Preview** akan terisi otomatis dengan data yang diambil.
+   - Status kolom di Preview akan menunjukkan:
+     - `New`: Data baru ditambahkan.
+     - `Updated`: Data lama diperbarui.
+     - `Skipped (Filled)`: Data dilewati karena sudah ada isinya.
 
-### 3. Language
+4. **Simpan**:
+   - Data otomatis disimpan ke file Excel setelah proses selesai.
+   - Jika file Excel sedang terbuka, akan muncul popup **Retry**. Tutup Excel lalu klik Retry.
 
-Click the **🌐** button in the top right corner to switch between Indonesian and English.
+## ⚠️ Troubleshooting
 
-### 4. Result
+**Q: Error "Permission denied" saat menyimpan?**
+A: Pastikan file Excel tujuan **DITUTUP**. Program tidak bisa menyimpan jika file sedang dibuka di Excel. Klik "Retry" pada popup setelah menutup file.
 
-Bandwidth data will be automatically filled in the Excel file according to matching date and time.
+**Q: Data tidak muncul / Kosong (0 rows)?**
+A:
+- Cek koneksi internet / VPN ke server Cacti.
+- Cookie mungkin expired. Jalankan `python setup_session.py` lagi.
+- Pastikan Nama Interface di `config.py` atau GUI sesuai persis dengan yang ada di Cacti.
 
-## ⚙️ Configuration
+**Q: Status kolom selalu "Pending"?**
+A: (Solved) Versi terbaru sudah menampilkan status realtime (`New`, `Updated`, `Skipped`). Pastikan Anda menggunakan kode terbaru.
 
-If you need to adjust settings, edit the `config.py` file:
+## 📝 Struktur Project
 
-### Cacti URL
-```python
-CACTI_URL = "http://monitor.kabngawi.id/cacti/graph_view.php"
-```
+- `gui.py`: Entry point aplikasi utama (GUI).
+- `scraper.py`: Core logic untuk scraping data (multithreaded).
+- `excel_writer.py`: Modul untuk membaca/menulis file Excel secara aman.
+- `config.py`: File konfigurasi user.
+- `setup_session.py`: Script pembantu untuk login & ambil cookie.
+- `cacti_cookies.json`: File penyimpan sesi login (jangan dishare!).
 
-### Interface to Sheet Mapping
-```python
-INTERFACE_TO_SHEET = {
-    "ether4-iForte": "iForte",
-    "ether5-Telkom": "Telkom",
-    "ether6-Moratel": "Moratel",
-}
-```
-
-### Excel Columns
-```python
-EXCEL_COL_TANGGAL = 1  # Column A
-EXCEL_COL_WAKTU = 2    # Column B
-EXCEL_COL_CURR_IN = 3  # Column C
-# ... etc
-```
-
-### Time Format
-```python
-TIME_FORMAT_EXCEL = "%H:%M"  # Example: "09:00"
-# or
-TIME_FORMAT_EXCEL = "%H:%M:%S"  # Example: "09:00:00"
-```
-
-## 🔧 Troubleshooting
-
-### Browser doesn't appear
-- Make sure Chrome is installed
-- Try setting `SHOW_BROWSER = True` in config.py
-
-### Data not found in Excel
-- Check sheet names (case-sensitive)
-- Check date/time format in Excel vs config.py
-- Make sure Excel file already has content (dates & times)
-
-### Cannot access Cacti
-- Make sure you're connected to the office network
-- Check URL in config.py
-
-## 📁 File Structure
-
-```
-cacti-autodata/
-├── main.py           # Entry point
-├── gui.py            # Graphical interface
-├── scraper.py        # Cacti scraping logic
-├── excel_writer.py   # Excel writing logic
-├── config.py         # Settings (EDIT THIS)
-├── languages.py      # Language strings (ID/EN)
-├── requirements.txt  # Dependencies
-└── README.md         # This documentation
-```
-
-## 📝 Notes
-
-- The program must run on a computer that can access Cacti
-- Do not close the browser that opens during the process
-- Backup the Excel file before running the program (just in case)
-
----
-
-Created by: **Rofikul Huda** | GitHub: [@rfypych](https://github.com/rfypych)
+## 📄 License
+Project ini dibuat untuk penggunaan internal tim monitoring.
