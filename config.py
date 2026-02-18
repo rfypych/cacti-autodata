@@ -102,3 +102,9 @@ EXCEL_DATA_START_ROW = 2
 # ============================================================
 # Jika True, data hari Sabtu dan Minggu tidak akan diambil
 SKIP_WEEKENDS = True
+
+# ============================================================
+# FITUR METADATA SHEET
+# ============================================================
+# Jika True, sheet Metadata akan ditambahkan ke file Excel
+INCLUDE_METADATA = True

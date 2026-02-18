@@ -46,7 +46,46 @@ class CactiScraper:
     def _update_progress(self, message: str, percentage: int = -1):
         """Update progress via callback"""
         self.progress_callback(message, percentage)
-    
+
+    def _generate_mock_data(self, start_date: datetime, end_date: datetime, interfaces: List[str]) -> List[Dict]:
+        """Generate dummy data for demo mode"""
+        import random
+        data = []
+        current = start_date
+        
+        while current <= end_date:
+            # Skip weekends if configured
+            if config.SKIP_WEEKENDS and current.weekday() >= 5:
+                current += timedelta(days=1)
+                continue
+                
+            for time_slot in config.TIME_SLOTS:
+                hour, minute = time_slot
+                
+                for interface in interfaces:
+                    # Random usage between 10M and 150M similar to real data
+                    curr_in = random.uniform(10, 150) * 1e6
+                    curr_out = random.uniform(5, 80) * 1e6
+                    
+                    row = {
+                        "date": current,
+                        "time_hour": hour,
+                        "time_minute": minute,
+                        "interface": interface,
+                        "sheet": config.INTERFACE_TO_SHEET.get(interface, interface),
+                        "curr_in": f"{curr_in/1e6:.2f} M",
+                        "curr_out": f"{curr_out/1e6:.2f} M",
+                        "max_in": f"{curr_in * 1.2/1e6:.2f} M",
+                        "max_out": f"{curr_out * 1.2/1e6:.2f} M",
+                        "avg_in": f"{curr_in * 0.4/1e6:.2f} M",
+                        "avg_out": f"{curr_out * 0.4/1e6:.2f} M"
+                    }
+                    data.append(row)
+            
+            current += timedelta(days=1)
+        
+        return data
+
     def start_browser(self, attach_to_existing: bool = False, debug_port: int = 9222):
         """
         Mulai browser Chrome
@@ -707,7 +746,8 @@ class CactiScraper:
 
 def run_scraper(start_date: datetime, end_date: datetime, 
                 progress_callback: Optional[Callable] = None,
-                attach_to_existing: bool = False) -> List[Dict]:
+                attach_to_existing: bool = False,
+                demo_mode: bool = False) -> List[Dict]:
     """
     Fungsi utama untuk menjalankan scraper.
     
@@ -719,11 +759,23 @@ def run_scraper(start_date: datetime, end_date: datetime,
         end_date: Tanggal akhir
         progress_callback: Callback untuk progress update
         attach_to_existing: Tidak dipakai di mode cepat
+        demo_mode: Jika True, generate dummy data
         
     Returns:
         List data yang di-scrape
     """
     scraper = CactiScraper(progress_callback)
+    
+    if demo_mode:
+        scraper._update_progress("🎮 Running in DEMO MODE...", 10)
+        time.sleep(1) # Simulate init
+        scraper._update_progress("Generating mock data...", 30)
+        time.sleep(1) # Simulate processing
+        
+        data = scraper._generate_mock_data(start_date, end_date, list(config.GRAPH_IDS.keys()))
+        
+        scraper._update_progress(f"Demo data generated: {len(data)} rows", 100)
+        return data
     
     # Mode cepat: tanpa Selenium, pakai requests langsung
     data = scraper.scrape_date_range_fast(start_date, end_date)

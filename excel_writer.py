@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Callable
 from openpyxl import load_workbook, Workbook
 from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.styles import Font
 import os
 
 import config
@@ -86,6 +87,7 @@ class ExcelWriter:
             self._update_progress("File Excel tersimpan!", 100)
         except Exception as e:
             self._update_progress(f"Gagal menyimpan file: {e}")
+            raise e
     
     def close_workbook(self):
         """Tutup workbook"""
@@ -203,23 +205,35 @@ class ExcelWriter:
             if value is not None:
                 sheet.cell(row=row, column=col, value=value)
     
-    def write_all_data(self, data_list: List[Dict]):
-        """Tulis semua data"""
+    def write_all_data(self, data_list: List[Dict]) -> List[Dict]:
+        """
+        Tulis semua data dan kembalikan data dengan status
+        Returns:
+            List data yang sudah terupdate dengan key '_status' dan '_row'
+        """
         total = len(data_list)
         written = 0
         skipped = 0
         new_rows = 0
+        results = []
         
         # Sort data by date and time to ensure nice append order
-        data_list.sort(key=lambda x: (x['date'], x['time_hour'], x['time_minute']))
+        # Kita copy dulu agar tidak merusak urutan asli referensi (opsional)
+        sorted_data = sorted(data_list, key=lambda x: (x['date'], x['time_hour'], x['time_minute']))
         
-        for i, data in enumerate(data_list):
+        for i, data in enumerate(sorted_data):
+            result_item = data.copy()
+            status = "Pending"
+            row_num = 0
+            
             sheet_name = data.get('sheet')
             # Fallback jika sheet None: pakai interface name
             if not sheet_name:
                 sheet_name = data.get('interface')
             
             if not sheet_name:
+                result_item['_status'] = "Error: No Sheet"
+                results.append(result_item)
                 continue
             
             sheet = self.get_sheet(sheet_name)
@@ -236,27 +250,72 @@ class ExcelWriter:
                 # Update existing row
                 if config.SKIP_FILLED_ROWS and self.is_row_filled(sheet, row):
                     skipped += 1
+                    status = "Skipped (Filled)"
+                    row_num = row
                     self._update_progress(f"⏭ Skip {sheet_name} (terisi)", 86 + int((i/total)*12))
                 else:
                     self.write_data_to_row(sheet, row, data)
                     written += 1
+                    status = "Updated"
+                    row_num = row
                     self._update_progress(f"✓ Update {sheet_name}: baris {row}", 86 + int((i/total)*12))
             else:
                 # Append new row
                 new_row = sheet.max_row + 1
                 self.write_data_to_row(sheet, new_row, data)
                 new_rows += 1
+                status = "New"
+                row_num = new_row
                 self._update_progress(f"➕ Baru {sheet_name}: baris {new_row}", 86 + int((i/total)*12))
+            
+            result_item['_status'] = status
+            result_item['_row'] = row_num
+            results.append(result_item)
         
         self._update_progress(f"Selesai: {written} update, {new_rows} baru, {skipped} skip.")
+        return results
+
+    def write_metadata(self, metadata: Dict):
+        """Buat sheet Metadata/Info"""
+        if "Metadata" in self.workbook.sheetnames:
+            ws = self.workbook["Metadata"]
+        else:
+            ws = self.workbook.create_sheet("Metadata")
+            
+        # Style
+        title_font = Font(bold=True, size=14)
+        header_font = Font(bold=True)
+        
+        ws["A1"] = "EXECUTION METADATA"
+        ws["A1"].font = title_font
+        
+        row = 3
+        for key, value in metadata.items():
+            ws.cell(row=row, column=1, value=key).font = header_font
+            ws.cell(row=row, column=2, value=str(value))
+            row += 1
+            
+        # Adjust width
+        ws.column_dimensions['A'].width = 20
+        ws.column_dimensions['B'].width = 50
+        self._update_progress("Metadata written to Excel.")
 
 
 def write_to_excel(file_path: str, data_list: List[Dict],
-                   progress_callback: Optional[Callable] = None):
+                   progress_callback: Optional[Callable] = None,
+                   metadata: Optional[Dict] = None):
     writer = ExcelWriter(file_path, progress_callback)
     try:
         writer.open_workbook()
-        writer.write_all_data(data_list)
+        results = writer.write_all_data(data_list)
+        
+        if metadata:
+            writer.write_metadata(metadata)
+            
         writer.save_workbook()
-    finally:
-        writer.close_workbook()
+        return results
+    except Exception as e:
+        if progress_callback:
+            progress_callback(f"❌ Error saving Excel: {e}")
+        # Re-raise exception so GUI can catch it
+        raise e

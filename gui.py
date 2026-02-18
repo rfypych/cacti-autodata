@@ -15,6 +15,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from datetime import datetime, timedelta
 import threading
+import queue
+import webbrowser
 import os
 from typing import Optional, Dict, List
 
@@ -98,14 +100,14 @@ class CactiAutoDataGUI:
         )
         self.title_label.pack(side=tk.LEFT)
         
-        # Language switcher
-        self.lang_btn = ttk.Button(
+        # Help Button (Moved from bottom)
+        self.help_btn = ttk.Button(
             title_row,
-            text="🌐 EN" if self.current_lang == "id" else "🌐 ID",
+            text="❓ Help",
             width=8,
-            command=self._toggle_language
+            command=self._show_help
         )
-        self.lang_btn.pack(side=tk.RIGHT)
+        self.help_btn.pack(side=tk.RIGHT)
         
         self.subtitle_label = ttk.Label(
             header_frame,
@@ -187,6 +189,13 @@ class CactiAutoDataGUI:
             variable=self.dry_run_var
         ).pack(anchor=tk.W)
         
+        self.demo_mode_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            options_frame, 
+            text="🎮 Demo Mode (gunakan data dummy untuk testing)", 
+            variable=self.demo_mode_var
+        ).pack(anchor=tk.W)
+        
         # ===== PROGRESS =====
         self.progress_frame = ttk.LabelFrame(self.main_frame, text=get_text("progress_title", self.current_lang), padding="8")
         self.progress_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
@@ -210,6 +219,9 @@ class CactiAutoDataGUI:
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
+        # Save Log Button
+        ttk.Button(self.progress_frame, text="💾 Save Log", command=self._save_log).pack(anchor=tk.E, pady=(2, 0))
+        
         # ===== BUTTONS =====
         button_frame = ttk.Frame(self.main_frame)
         button_frame.pack(fill=tk.X)
@@ -229,17 +241,12 @@ class CactiAutoDataGUI:
         )
         self.stop_btn.pack(side=tk.LEFT, padx=2)
         
-        ttk.Button(
-            button_frame,
-            text="💾 Export Log",
-            command=self._export_log
-        ).pack(side=tk.LEFT, padx=2)
+        self.stop_btn.pack(side=tk.LEFT, padx=2)
         
-        ttk.Button(
-            button_frame,
-            text=get_text("btn_help", self.current_lang),
-            command=self._show_help
-        ).pack(side=tk.LEFT, padx=2)
+        # Expert Log button removed (redundant with Save Log)
+        
+        # Help button moved to top header
+        
         
         ttk.Button(
             button_frame,
@@ -264,6 +271,16 @@ class CactiAutoDataGUI:
         ttk.Radiobutton(time_frame, text="Titik (09.00, 16.00)", variable=self.time_format_var, value="dot").pack(anchor=tk.W)
         ttk.Radiobutton(time_frame, text="Titik Dua (09:00, 16:00)", variable=self.time_format_var, value="colon").pack(anchor=tk.W)
         
+        # New Section: Data & Output Rules
+        data_frame = ttk.LabelFrame(self.settings_frame, text="📊 Data & Output Rules", padding="10")
+        data_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.skip_weekend_var = tk.BooleanVar(value=self.settings.get("skip_weekends", config.SKIP_WEEKENDS))
+        ttk.Checkbutton(data_frame, text="Skip Weekend (Sabtu & Minggu tidak diambil)", variable=self.skip_weekend_var).pack(anchor=tk.W)
+        
+        self.include_metadata_var = tk.BooleanVar(value=self.settings.get("include_metadata", config.INCLUDE_METADATA))
+        ttk.Checkbutton(data_frame, text="Include Metadata (Sheet info tambahan di Excel)", variable=self.include_metadata_var).pack(anchor=tk.W)
+        
         # Interface Mapping
         mapping_frame = ttk.LabelFrame(self.settings_frame, text="🔗 Interface → Sheet Mapping", padding="10")
         mapping_frame.pack(fill=tk.X, pady=(0, 10))
@@ -283,36 +300,8 @@ class CactiAutoDataGUI:
             var = tk.StringVar(value=sheet_val)
             self.mapping_vars[interface] = var
             ttk.Entry(row_frame, textvariable=var, width=15).pack(side=tk.LEFT, padx=5)
-        
-        # Browser options
-        browser_frame = ttk.LabelFrame(self.settings_frame, text="🖥️ Browser Options", padding="10")
-        browser_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        self.show_browser_var = tk.BooleanVar(value=self.settings.get("show_browser", True))
-        ttk.Checkbutton(browser_frame, text="Show browser window (tampilkan browser saat scraping)", variable=self.show_browser_var).pack(anchor=tk.W)
-        
-        self.attach_existing_var = tk.BooleanVar(value=self.settings.get("attach_existing", False))
-        ttk.Checkbutton(browser_frame, text="🔗 Attach to existing Chrome (gunakan browser yang sudah terbuka)", variable=self.attach_existing_var).pack(anchor=tk.W)
-        
-        # Info for attach mode
-        attach_info = ttk.Frame(browser_frame)
-        attach_info.pack(fill=tk.X, pady=(5, 0))
-        
-        ttk.Label(
-            attach_info,
-            text="💡 Untuk pakai Chrome existing, jalankan Chrome dengan command:",
-            font=("Segoe UI", 8, "italic"),
-            foreground="gray"
-        ).pack(anchor=tk.W)
-        
-        cmd_frame = ttk.Frame(attach_info)
-        cmd_frame.pack(fill=tk.X, pady=2)
-        
-        self.debug_cmd_var = tk.StringVar(value='"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222')
-        cmd_entry = ttk.Entry(cmd_frame, textvariable=self.debug_cmd_var, font=("Consolas", 8), state="readonly")
-        cmd_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        ttk.Button(cmd_frame, text="📋 Copy", width=8, command=self._copy_debug_cmd).pack(side=tk.LEFT, padx=5)
+            
+        # Browser Options removed as they are not used in Fast Mode
         
         # Save/Reset buttons
         btn_frame = ttk.Frame(self.settings_frame)
@@ -331,36 +320,16 @@ class CactiAutoDataGUI:
         )
         info_label.pack(anchor=tk.W, pady=(0, 10))
         
-        # Preview table
-        columns = ("Interface", "Sheet", "Tanggal", "Waktu", "Curr IN", "Curr OUT", "Max IN", "Max OUT", "Avg IN", "Avg OUT", "Status")
+        # Preview Notebook (Tabs per sheet)
+        self.preview_notebook = ttk.Notebook(self.preview_frame)
+        self.preview_notebook.pack(fill=tk.BOTH, expand=True)
         
-        tree_frame = ttk.Frame(self.preview_frame)
-        tree_frame.pack(fill=tk.BOTH, expand=True)
+        # Dictionary to store treeviews: {sheet_name: treeview}
+        # Dictionary to store treeviews: {sheet_name: treeview}
+        self.preview_trees = {}
         
-        self.preview_tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=15)
-        
-        # Configure columns
-        col_widths = {
-            "Interface": 80, "Sheet": 80, "Tanggal": 80, "Waktu": 50, 
-            "Status": 80, "Curr IN": 70, "Curr OUT": 70, 
-            "Max IN": 70, "Max OUT": 70, "Avg IN": 70, "Avg OUT": 70
-        }
-        for col in columns:
-            self.preview_tree.heading(col, text=col)
-            width = col_widths.get(col, 65)
-            self.preview_tree.column(col, width=width, minwidth=50, anchor="center")
-        
-        # Scrollbars
-        vsb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.preview_tree.yview)
-        hsb = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=self.preview_tree.xview)
-        self.preview_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        
-        self.preview_tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-        
-        tree_frame.grid_rowconfigure(0, weight=1)
-        tree_frame.grid_columnconfigure(0, weight=1)
+        # Initial empty tab removed per request
+        # self._create_sheet_tab("Preview")
         
         # Buttons
         preview_btn_frame = ttk.Frame(self.preview_frame)
@@ -368,6 +337,56 @@ class CactiAutoDataGUI:
         
         ttk.Button(preview_btn_frame, text="🗑️ Clear Preview", command=self._clear_preview).pack(side=tk.LEFT, padx=5)
         self.write_btn = ttk.Button(preview_btn_frame, text="✍️ Write to Excel", command=self._write_preview_data, state=tk.DISABLED)
+        self.write_btn.pack(side=tk.LEFT, padx=5)
+
+    def _create_sheet_tab(self, sheet_name):
+        """Create a new tab for a specific sheet"""
+        tab_frame = ttk.Frame(self.preview_notebook)
+        self.preview_notebook.add(tab_frame, text=sheet_name)
+        
+        # Treeview
+        columns = ("Tanggal", "Waktu", "Curr IN", "Curr OUT", "Max IN", "Max OUT", "Avg IN", "Avg OUT", "Status")
+        
+        tree_frame = ttk.Frame(tab_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=15)
+        
+        # Configure row tags for striping
+        # Configure row tags for striping with color
+        tree.tag_configure('oddrow', background='#e3f2fd')  # Light Blue
+        tree.tag_configure('evenrow', background='#ffffff') # White
+        
+        # Style for Header
+        style = ttk.Style()
+        style.configure("Treeview.Heading", font=('Segoe UI', 9, 'bold'), background="#d1e7dd")
+        
+        # Configure columns
+        col_widths = {
+            "Tanggal": 80, "Waktu": 60, 
+            "Status": 80, "Curr IN": 80, "Curr OUT": 80, 
+            "Max IN": 80, "Max OUT": 80, "Avg IN": 80, "Avg OUT": 80
+        }
+        
+        for col in columns:
+            tree.heading(col, text=col)
+            width = col_widths.get(col, 70)
+            tree.column(col, width=width, minwidth=50, anchor="center")
+            
+        # Scrollbars
+        vsb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+        hsb = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        
+        tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        
+        tree_frame.grid_rowconfigure(0, weight=1)
+        tree_frame.grid_columnconfigure(0, weight=1)
+        
+        self.preview_trees[sheet_name] = tree
+        return tree
         self.write_btn.pack(side=tk.LEFT, padx=5)
     
     def _show_calendar(self, target: str):
@@ -472,18 +491,6 @@ class CactiAutoDataGUI:
         
         update_calendar()
     
-    def _toggle_language(self):
-        """Toggle between Indonesian and English"""
-        if self.current_lang == "id":
-            self.current_lang = "en"
-            self.lang_btn.config(text="🌐 ID")
-        else:
-            self.current_lang = "id"
-            self.lang_btn.config(text="🌐 EN")
-        
-        self.settings["language"] = self.current_lang
-        self._update_all_texts()
-    
     def _update_all_texts(self):
         """Update all UI text to current language"""
         lang = self.current_lang
@@ -496,12 +503,6 @@ class CactiAutoDataGUI:
         self.progress_frame.config(text=get_text("progress_title", lang))
         self.start_btn.config(text=get_text("btn_start", lang))
         self.stop_btn.config(text=get_text("btn_stop", lang))
-    
-    def _copy_debug_cmd(self):
-        """Copy debug command to clipboard"""
-        self.root.clipboard_clear()
-        self.root.clipboard_append(self.debug_cmd_var.get())
-        messagebox.showinfo("Info", "Command copied to clipboard!\n\nPaste dan jalankan di Command Prompt.")
     
     def _browse_excel(self):
         """Browse for Excel file"""
@@ -645,8 +646,13 @@ class CactiAutoDataGUI:
         # Skip filled rows
         config.SKIP_FILLED_ROWS = self.skip_filled_var.get()
         
-        # Show browser
-        config.SHOW_BROWSER = self.show_browser_var.get()
+        
+        # Show browser - Removed
+        # config.SHOW_BROWSER = self.show_browser_var.get()
+        
+        # Apply new settings
+        config.SKIP_WEEKENDS = self.skip_weekend_var.get()
+        config.INCLUDE_METADATA = self.include_metadata_var.get()
         
         # URL
         config.CACTI_URL = self.url_var.get()
@@ -659,17 +665,25 @@ class CactiAutoDataGUI:
         """Thread for running scraping"""
         lang = self.current_lang
         is_dry_run = self.dry_run_var.get()
+        is_demo_mode = self.demo_mode_var.get()
         
         try:
             mode_text = "🧪 DRY RUN MODE - " if is_dry_run else ""
+            if is_demo_mode: mode_text = "🎮 DEMO MODE - "
+            
             self._update_progress(f"{mode_text}Memulai proses...", 0)
             
             # Filter interfaces by selected sheets
             selected_sheets = [name for name, var in self.sheet_vars.items() if var.get()]
             
-            # Scrape data with attach option
-            attach_existing = self.attach_existing_var.get()
-            data = run_scraper(start_date, end_date, self._update_progress, attach_to_existing=attach_existing)
+            # Scrape data 
+            # Browser options removed from UI as Fast Mode calls requests directly
+            data = run_scraper(
+                start_date, 
+                end_date, 
+                self._update_progress, 
+                demo_mode=is_demo_mode
+            )
             
             # Filter by selected sheets (if any selected)
             if selected_sheets and data:
@@ -688,23 +702,75 @@ class CactiAutoDataGUI:
             if not data:
                 self._update_progress(get_text("status_no_data", lang))
             else:
-                # Populate preview
-                self.root.after(0, lambda: self._populate_preview(data, excel_path))
+                # Populate preview (Delayed until write is done for live mode)
+                if is_dry_run:
+                     self.root.after(0, lambda: self._populate_preview(data, excel_path))
                 
                 if is_dry_run:
                     self._update_progress(f"🧪 DRY RUN: {len(data)} data siap untuk ditulis (preview only)", 100)
                     self.root.after(0, lambda: self.write_btn.configure(state=tk.NORMAL))
                     self.root.after(0, lambda: self.notebook.select(self.preview_frame))
                 else:
-                    # Write to Excel
-                    write_to_excel(excel_path, data, self._update_progress)
+                    # Write to Excel with Metadata (if enabled)
+                    metadata = None
+                    if config.INCLUDE_METADATA:
+                        metadata = {
+                            "Generated At": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "Data Period": f"{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}",
+                            "User": os.getlogin(),
+                            "Mode": "Demo / Mock" if is_demo_mode else "Live Scraping",
+                            "Source URL": config.CACTI_URL,
+                            "Interfaces": ", ".join(selected_sheets) if selected_sheets else "All"
+                        }
+                    while True:
+                        try:
+                            results = write_to_excel(excel_path, data, self._update_progress, metadata=metadata)
+                            
+                            # Jika berhasil, keluar loop
+                            break
+                            
+                        except PermissionError:
+                            self._update_progress(f"⚠️ Gagal menyimpan: File sedang dibuka. Menunggu user...", 0)
+                            
+                            # Thread-safe way to ask user
+                            response_queue = queue.Queue()
+                            
+                            def ask_retry():
+                                ans = messagebox.askretrycancel(
+                                    "Gagal Menyimpan", 
+                                    f"File Excel '{os.path.basename(excel_path)}' sedang dibuka!\n\n"
+                                    "Mohon tutup file tersebut lalu klik Retry untuk menyimpan.\n"
+                                    "Jika Anda klik Cancel, data hasil scraping akan HILANG."
+                                )
+                                response_queue.put(ans)
+                            
+                            self.root.after(0, ask_retry)
+                            
+                            # Wait for response (blocking this thread)
+                            should_retry = response_queue.get()
+                            
+                            if not should_retry:
+                                self._update_progress(f"❌ Penyimpanan dibatalkan oleh user.")
+                                return # Exit thread/process
+                            
+                            self._update_progress(f"🔄 Mencoba menyimpan ulang...", 50)
+                            # Loop continues and tries write_to_excel again
+
+                    # Update preview with actual results (including status)
+                    self.root.after(0, lambda: self._populate_preview(results, excel_path))
+                    
                     self._update_progress(get_text("status_complete", lang), 100)
                     
                     self.root.after(0, lambda: messagebox.showinfo(
                         get_text("success_title", lang), 
-                        get_text("success_message", lang, count=len(data))
+                        f"{get_text('success_message', lang, count=len(data))}\n\nFile saved to:\n{excel_path}"
                     ))
             
+        except Exception as e:
+            err_msg = str(e)
+            self._update_progress(f"❌ Error: {err_msg}")
+            self.root.after(0, lambda: messagebox.showerror("Error", err_msg))
+
         except Exception as e:
             err_msg = str(e)
             self._update_progress(f"❌ Error: {err_msg}")
@@ -716,29 +782,78 @@ class CactiAutoDataGUI:
             self.root.after(0, lambda: self.stop_btn.configure(state=tk.DISABLED))
     
     def _populate_preview(self, data: List[Dict], excel_path: str = ""):
-        """Populate preview tree with data"""
-        self._clear_preview()
+        """Populate preview with scraped data grouped by sheet"""
+        # Clear existing data in all tabs
+        for tree in self.preview_trees.values():
+            for item in tree.get_children():
+                tree.delete(item)
         
+        if not data:
+            return
+            
+        # Group data by sheet
+        # Structure: { "iForte": [row1, row2], "Telkom": [...] }
+        grouped_data = {}
         for item in data:
-            values = (
-                item.get('interface', ''),
-                item.get('sheet') or '-', # Fallback to '-' if None
-                item.get('date', '').strftime('%d/%m/%Y') if item.get('date') else '',
-                f"{item.get('time_hour', 0):02d}.{item.get('time_minute', 0):02d}",
-                item.get('curr_in', ''),
-                item.get('curr_out', ''),
-                item.get('max_in', ''),
-                item.get('max_out', ''),
-                item.get('avg_in', ''),
-                item.get('avg_out', ''),
-                "Pending"
-            )
-            self.preview_tree.insert('', tk.END, values=values)
+            sheet = item.get('sheet') or item.get('interface') or 'Unknown'
+            if sheet not in grouped_data:
+                grouped_data[sheet] = []
+            grouped_data[sheet].append(item)
+            
+        # Create tabs for new sheets if needed
+        for sheet_name in grouped_data.keys():
+            if sheet_name not in self.preview_trees:
+                self._create_sheet_tab(sheet_name)
+                
+        # Populate each sheet
+        for sheet_name, items in grouped_data.items():
+            tree = self.preview_trees.get(sheet_name)
+            if not tree: continue
+            
+            # Sort by Date then Time
+            items.sort(key=lambda x: (x.get('date', datetime.min), x.get('time_hour', 0), x.get('time_minute', 0)))
+            
+            last_date_str = ""
+            
+            for i, item in enumerate(items):
+                date_val = item.get('date', '')
+                date_str = date_val.strftime('%d/%m/%Y') if date_val else ''
+                
+                # Visual Merge: If date is same as last row, make it empty
+                display_date = date_str
+                if date_str == last_date_str and date_str != "":
+                    display_date = ""
+                else:
+                    last_date_str = date_str
+                
+                values = (
+                    display_date,
+                    f"{item.get('time_hour', 0):02d}.{item.get('time_minute', 0):02d}",
+                    item.get('curr_in', ''),
+                    item.get('curr_out', ''),
+                    item.get('max_in', ''),
+                    item.get('max_out', ''),
+                    item.get('avg_in', ''),
+                    item.get('avg_out', ''),
+                    item.get('_status', 'Pending') # Use actual status or Pending
+                )
+                
+                # Determine tag for striping
+                tag = 'evenrow' if i % 2 == 0 else 'oddrow'
+                
+                tree.insert("", "end", values=values, tags=(tag,))
+
+        # Select first tab
+        if grouped_data and self.preview_notebook.tabs():
+            self.preview_notebook.select(0)
+        
+        self.write_btn.configure(state=tk.NORMAL)
     
     def _clear_preview(self):
-        """Clear preview tree"""
-        for item in self.preview_tree.get_children():
-            self.preview_tree.delete(item)
+        """Clear preview data"""
+        for tree in self.preview_trees.values():
+            for item in tree.get_children():
+                tree.delete(item)
         self.write_btn.configure(state=tk.DISABLED)
     
     def _write_preview_data(self):
@@ -754,11 +869,51 @@ class CactiAutoDataGUI:
         
         try:
             write_to_excel(excel_path, self.scraped_data, self._update_progress)
-            messagebox.showinfo("Sukses", f"Berhasil menulis {len(self.scraped_data)} data ke Excel!")
+            messagebox.showinfo("Sukses", f"Berhasil menulis {len(self.scraped_data)} data ke Excel!\n\nFile saved to:\n{excel_path}")
             self._clear_preview()
         except Exception as e:
             messagebox.showerror("Error", str(e))
     
+    def _save_log(self):
+        """Save log to file with header"""
+        if not self.log_text.get(1.0, tk.END).strip():
+            messagebox.showwarning("Info", "Log kosong, tidak ada yang perlu disimpan.")
+            return
+
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        logs_dir = os.path.join(base_dir, "logs")
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+            
+        filename = f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        filepath = filedialog.asksaveasfilename(
+            initialdir=logs_dir,
+            title="Save Log File",
+            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")],
+            defaultextension=".txt",
+            initialfile=filename
+        )
+        
+        if filepath:
+            try:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    # Write Header
+                    f.write("="*50 + "\n")
+                    f.write(f"CACTI AUTODATA - EXECUTION LOG\n")
+                    f.write("="*50 + "\n")
+                    f.write(f"Generated At: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write(f"URL         : {self.url_var.get()}\n")
+                    f.write(f"Date Range  : {self.start_date_var.get()} - {self.end_date_var.get()}\n")
+                    f.write(f"Demo Mode   : {'Yes' if self.demo_mode_var.get() else 'No'}\n")
+                    f.write("-" * 50 + "\n\n")
+                    
+                    # Write Log Content
+                    f.write(self.log_text.get(1.0, tk.END))
+                    
+                messagebox.showinfo("Sukses", f"Log berhasil disimpan ke:\n{filepath}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Gagal menyimpan log: {e}")
+
     def _save_settings(self):
         """Save settings to file"""
         new_settings = {
@@ -766,9 +921,9 @@ class CactiAutoDataGUI:
             "time_format": self.time_format_var.get(),
             "interface_mapping": {k: v.get() for k, v in self.mapping_vars.items()},
             "selected_sheets": {k: v.get() for k, v in self.sheet_vars.items()},
-            "skip_filled_rows": self.skip_filled_var.get(),
+            "skip_weekends": self.skip_weekend_var.get(),
+            "include_metadata": self.include_metadata_var.get(),
             "dry_run_mode": self.dry_run_var.get(),
-            "show_browser": self.show_browser_var.get(),
             "language": self.current_lang,
         }
         
@@ -794,6 +949,8 @@ class CactiAutoDataGUI:
             "last_end_date": self.end_date_var.get(),
             "selected_sheets": {k: v.get() for k, v in self.sheet_vars.items()},
             "skip_filled_rows": self.skip_filled_var.get(),
+            "skip_weekends": self.skip_weekend_var.get(),
+            "include_metadata": self.include_metadata_var.get(),
             "dry_run_mode": self.dry_run_var.get(),
         })
     
@@ -850,49 +1007,50 @@ class CactiAutoDataGUI:
         basic_frame = ttk.LabelFrame(scrollable_frame, text=get_text("help_basic_title", lang), padding="10")
         basic_frame.pack(fill=tk.X, pady=(0, 10))
         
-        ttk.Label(
-            basic_frame,
-            text=get_text("help_basic_steps", lang),
-            font=("Segoe UI", 9),
-            justify=tk.LEFT
-        ).pack(anchor=tk.W)
+        # ===== CONTENT =====
+        help_text = """
+1. **Pilih Tanggal**: Tentukan rentang tanggal data yang ingin diambil.
+2. **Pilih URL**: Pastikan URL Cacti sudah benar (default biasanya sudah oke).
+3. **Setting Sheet**: Masuk ke tab 'Settings', pastikan setiap Interface sudah dipetakan ke nama Sheet Excel yang sesuai.
+4. **Mulai**: Klik tombol 'Start Scraping'.
+5. **Login**: Jendela browser akan muncul. Silakan login ke Cacti secara manual.
+6. **Tunggu**: Setelah login, biarkan aplikasi bekerja sendiri. Jangan tutup browsernya!
+7. **Selesai**: File Excel akan otomatis tersimpan di folder 'results'.
+
+FITUR-FITUR:
+----------------
+• **Auto-Resume**: Jika koneksi putus, aplikasi akan mencoba lanjut dari titik terakhir.
+• **Demo Mode**: Gunakan untuk latihan/testing tanpa koneksi Cacti.
+• **Tabbed Preview**: Lihat data per sheet sebelum disimpan.
+• **Save Log**: Simpan riwayat eksekusi untuk laporan atau troubleshooting.
+• **Excel Metadata**: File output memiliki sheet 'Metadata' berisi info eksekusi.
+
+TROUBLESHOOTING:
+----------------
+Q: Browser tidak muncul?
+A: Pastikan Chrome sudah terinstall. Coba mode 'Show Browser' di settings.
+
+Q: Data di Excel kosong/salah?
+A: Cek tab 'Settings', pastikan mapping Interface ke Sheet sudah benar.
+
+Q: Error "Element not found"?
+A: Mungkin internet lambat atau struktur web Cacti berubah. Coba lagi dengan koneksi stabil.
+
+Q: Tombol Start tidak bisa diklik?
+A: Pastikan tanggal sudah diisi dengan format DD/MM/YYYY.
+
+TIPS:
+----------------
+- Gunakan fitur 'Demo Mode' untuk melihat bagaimana hasil akhir Excel akan terlihat.
+- Selalu cek 'Preview' sebelum file benar-benar disimpan jika Anda ragu.
+"""
         
-        # ===== FEATURES =====
-        features_frame = ttk.LabelFrame(scrollable_frame, text=get_text("help_features_title", lang), padding="10")
-        features_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(
-            features_frame,
-            text=get_text("help_features", lang),
-            font=("Consolas", 9),
-            justify=tk.LEFT
-        ).pack(anchor=tk.W)
-        
-        # ===== TIPS =====
-        tips_frame = ttk.LabelFrame(scrollable_frame, text=get_text("help_tips_title", lang), padding="10")
-        tips_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        ttk.Label(
-            tips_frame,
-            text=get_text("help_tips", lang),
-            font=("Segoe UI", 9),
-            justify=tk.LEFT
-        ).pack(anchor=tk.W)
-        
-        # ===== WARNINGS =====
-        warning_frame = ttk.LabelFrame(scrollable_frame, text=get_text("help_warnings_title", lang), padding="10")
-        warning_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        for key in ["help_warning1", "help_warning2", "help_warning3"]:
-            ttk.Label(
-                warning_frame,
-                text=f"⚠️ {get_text(key, lang)}",
-                font=("Segoe UI", 9),
-                foreground="#e67e22"
-            ).pack(anchor=tk.W, pady=1)
-        
-        # ===== CREATOR =====
-        ttk.Separator(scrollable_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(10, 10))
+        text_widget = tk.Text(scrollable_frame, wrap=tk.WORD, font=("Segoe UI", 10), bg="#f0f0f0", relief=tk.FLAT, height=25)
+        text_widget.insert(tk.END, help_text)
+        text_widget.configure(state=tk.DISABLED)
+        text_widget.pack(fill=tk.BOTH, expand=True)
+        # Creator Frame (Footer)
+        ttk.Separator(scrollable_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(20, 10))
         
         creator_frame = ttk.Frame(scrollable_frame)
         creator_frame.pack(fill=tk.X)
