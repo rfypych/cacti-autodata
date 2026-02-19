@@ -133,3 +133,77 @@ A: (Solved) Versi terbaru sudah menampilkan status realtime (`New`, `Updated`, `
 
 ## 📄 License
 Project ini dibuat untuk penggunaan internal tim monitoring.
+
+## 🏗️ Arsitektur & Alur Kerja
+
+### Diagram Arsitektur
+Gambaran bagaimana modul-modul saling berinteraksi:
+
+```mermaid
+graph TD
+    User([User]) -->|Interacts| GUI[gui.py]
+    User -->|Configures| Config[config.py]
+    
+    subgraph Core Application
+        GUI -->|Controls| Scraper[scraper.py]
+        GUI -->|Manages| Session[setup_session.py]
+        GUI -->|Displays| Preview[Data Preview]
+    end
+    
+    subgraph Data Handling
+        Scraper -->|Fetches HTML| Cacti((Cacti Web))
+        Scraper -->|Parses Data| Parser{Data Parser}
+        Parser -->|Raw Data| ExcelWriter[excel_writer.py]
+    end
+    
+    subgraph Storage
+        Session -->|Saves| Cookie[cacti_cookies.json]
+        ExcelWriter -->|Writes/Appends| ExcelFile[(Laporan.xlsx)]
+        Cookie -.->|Auth| Scraper
+    end
+
+    style GUI fill:#f9f,stroke:#333,stroke-width:2px
+    style ExcelWriter fill:#bfb,stroke:#333,stroke-width:2px
+    style Scraper fill:#bbf,stroke:#333,stroke-width:2px
+```
+
+### Flowchart Proses Utama
+Alur logika dari mulai sampai data tersimpan:
+
+```mermaid
+flowchart TD
+    Start([Mulai]) --> CheckCookie{Cookie Valid?}
+    
+    CheckCookie -- No --> Login[Input Cookie Manual\n(di GUI Settings)]
+    Login --> SaveCookie[Simpan ke JSON]
+    SaveCookie --> CheckCookie
+    
+    CheckCookie -- Yes --> Setup[Pilih Tanggal & File Excel]
+    Setup --> Config[Pilih Interface & Options]
+    Config --> Run[Klik START]
+    
+    Run --> ScraperLoop{Loop Tanggal}
+    
+    subgraph Scraping Process
+        ScraperLoop -->|Next Date| Fetch[Request ke Cacti]
+        Fetch --> Parse[Ambil Data Tabel]
+        Parse --> Valid{Data Valid?}
+        Valid -- No --> LogError[Log Error]
+        Valid -- Yes --> Buffer[Simpan di Memory]
+    end
+    
+    Valid -->|Next| ScraperLoop
+    LogError -->|Next| ScraperLoop
+    
+    ScraperLoop -- Selesai --> WriteExcel[Tulis ke Excel]
+    
+    WriteExcel --> FileOpen{File Terbuka?}
+    FileOpen -- Ya --> Popup[Show Retry Dialog]
+    Popup --> UserClose[User Tutup Excel]
+    UserClose --> Retry[Klik Retry]
+    Retry --> WriteExcel
+    
+    FileOpen -- Tidak --> Save[Simpan File .xlsx]
+    Save --> ShowResult[Tampilkan Popup Sukses]
+    ShowResult --> Finish([Selesai])
+```

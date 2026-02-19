@@ -28,6 +28,167 @@ from languages import LANGUAGES, get_text
 from settings_manager import load_settings, save_settings, update_settings
 
 
+
+class CalendarDialog(tk.Toplevel):
+    """
+    Enhanced Date Picker Dialog
+    - Positioned near mouse/button
+    - Better visual style
+    - 'Today' shortcut
+    """
+    def __init__(self, parent, callback, initial_date=None):
+        super().__init__(parent)
+        self.callback = callback
+        self.withdraw() # Hide first
+        self.overrideredirect(True) # Frameless for popup feel
+        
+        self.configure(bg="#ffffff", relief="raised", borderwidth=1)
+        
+        # Style vars
+        self.style = ttk.Style()
+        self.style.configure("Cal.TButton", padding=2)
+        
+        # Date logic
+        if initial_date:
+            self.current_date = initial_date
+        else:
+            self.current_date = datetime.now()
+            
+        self.view_date = self.current_date # For navigation
+        self.selected_date = self.current_date
+        
+        self.setup_ui()
+        self.update_calendar()
+        
+        # Position near mouse
+        x = parent.winfo_pointerx()
+        y = parent.winfo_pointery()
+        self.geometry(f"+{x}+{y}")
+        self.deiconify()
+        
+        # Close when losing focus
+        self.bind("<FocusOut>", lambda e: self.destroy() if str(e.widget) == str(self) else None)
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.focus_set()
+
+    def setup_ui(self):
+        # Header (Month Year + Nav)
+        header_frame = tk.Frame(self, bg="#2c3e50", pady=5)
+        header_frame.pack(fill=tk.X)
+        
+        btn_prev = tk.Button(header_frame, text="<", bg="#2c3e50", fg="white", 
+                            relief="flat", command=self.prev_month, width=3)
+        btn_prev.pack(side=tk.LEFT)
+        
+        self.lbl_header = tk.Label(header_frame, text="", bg="#2c3e50", fg="white", 
+                                  font=("Segoe UI", 10, "bold"))
+        self.lbl_header.pack(side=tk.LEFT, expand=True)
+        
+        btn_next = tk.Button(header_frame, text=">", bg="#2c3e50", fg="white", 
+                            relief="flat", command=self.next_month, width=3)
+        btn_next.pack(side=tk.RIGHT)
+        
+        # Days Header
+        days_header = tk.Frame(self, bg="#ecf0f1")
+        days_header.pack(fill=tk.X)
+        days = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+        for i, day in enumerate(days):
+            color = "red" if i >= 5 else "black"
+            tk.Label(days_header, text=day, width=4, bg="#ecf0f1", fg=color,
+                    font=("Segoe UI", 8, "bold")).pack(side=tk.LEFT)
+        
+        # Days Grid
+        self.grid_frame = tk.Frame(self, bg="white", padx=5, pady=5)
+        self.grid_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Footer
+        footer = tk.Frame(self, bg="#bdc3c7", pady=2)
+        footer.pack(fill=tk.X)
+        tk.Button(footer, text="Today", relief="flat", bg="#bdc3c7", 
+                 command=self.go_today, font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=5)
+        tk.Button(footer, text="Close", relief="flat", bg="#bdc3c7", 
+                 command=self.destroy, font=("Segoe UI", 8)).pack(side=tk.RIGHT, padx=5)
+
+    def update_calendar(self):
+        # Update Header
+        self.lbl_header.config(text=self.view_date.strftime("%B %Y"))
+        
+        # Clear grid
+        for widget in self.grid_frame.winfo_children():
+            widget.destroy()
+            
+        # Helper vars
+        year = self.view_date.year
+        month = self.view_date.month
+        
+        # First day of month
+        first_day = datetime(year, month, 1)
+        weekday_start = first_day.weekday() # 0=Mon
+        
+        # Days in month
+        if month == 12:
+            next_month = datetime(year + 1, 1, 1)
+        else:
+            next_month = datetime(year, month + 1, 1)
+        days_in_month = (next_month - first_day).days
+        
+        # Draw buttons
+        row = 0
+        col = weekday_start
+        
+        for day in range(1, days_in_month + 1):
+            date_obj = datetime(year, month, day)
+            
+            # Style for button
+            bg_color = "#f0f0f0"
+            fg_color = "black"
+            
+            # Highlight today
+            if date_obj.date() == datetime.now().date():
+                fg_color = "blue"
+                font_weight = "bold"
+            else:
+                font_weight = "normal"
+            
+            # Selected date
+            if date_obj.date() == self.selected_date.date():
+                bg_color = "#3498db"
+                fg_color = "white"
+            
+            btn = tk.Button(self.grid_frame, text=str(day), width=3, relief="flat",
+                           bg=bg_color, fg=fg_color, font=("Segoe UI", 9, font_weight),
+                           command=lambda d=date_obj: self.select_date(d))
+            btn.grid(row=row, column=col, sticky="nsew", padx=1, pady=1)
+            
+            col += 1
+            if col > 6:
+                col = 0
+                row += 1
+
+    def prev_month(self):
+        first = self.view_date.replace(day=1)
+        prev = first - timedelta(days=1)
+        self.view_date = prev.replace(day=1)
+        self.update_calendar()
+
+    def next_month(self):
+        year = self.view_date.year
+        month = self.view_date.month
+        if month == 12:
+            self.view_date = datetime(year + 1, 1, 1)
+        else:
+            self.view_date = datetime(year, month + 1, 1)
+        self.update_calendar()
+
+    def go_today(self):
+        self.view_date = datetime.now()
+        self.update_calendar()
+
+    def select_date(self, date_obj):
+        self.callback(date_obj)
+        self.destroy()
+
+
 class CactiAutoDataGUI:
     """GUI utama aplikasi dengan fitur lengkap"""
     
@@ -408,13 +569,7 @@ class CactiAutoDataGUI:
         self.write_btn.pack(side=tk.LEFT, padx=5)
     
     def _show_calendar(self, target: str):
-        """Show simple date picker dialog"""
-        cal_window = tk.Toplevel(self.root)
-        cal_window.title("📅 Select Date")
-        cal_window.geometry("300x320")
-        cal_window.transient(self.root)
-        cal_window.grab_set()
-        
+        """Show improved date picker dialog"""
         # Get current date from entry
         try:
             if target == "start":
@@ -423,91 +578,15 @@ class CactiAutoDataGUI:
                 current = datetime.strptime(self.end_date_var.get(), "%d/%m/%Y")
         except:
             current = datetime.now()
-        
-        # Month/Year selection
-        nav_frame = ttk.Frame(cal_window, padding="10")
-        nav_frame.pack(fill=tk.X)
-        
-        month_var = tk.IntVar(value=current.month)
-        year_var = tk.IntVar(value=current.year)
-        
-        def update_calendar():
-            # Clear existing
-            for widget in days_frame.winfo_children():
-                widget.destroy()
             
-            # Day headers
-            for i, day in enumerate(["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]):
-                ttk.Label(days_frame, text=day, width=3, font=("Segoe UI", 9, "bold")).grid(row=0, column=i)
-            
-            # Calculate first day of month
-            first_day = datetime(year_var.get(), month_var.get(), 1)
-            start_weekday = first_day.weekday()
-            
-            # Calculate days in month
-            if month_var.get() == 12:
-                next_month = datetime(year_var.get() + 1, 1, 1)
-            else:
-                next_month = datetime(year_var.get(), month_var.get() + 1, 1)
-            days_in_month = (next_month - first_day).days
-            
-            # Create day buttons
-            row = 1
-            col = start_weekday
-            for day in range(1, days_in_month + 1):
-                btn = ttk.Button(
-                    days_frame, 
-                    text=str(day), 
-                    width=3,
-                    command=lambda d=day: select_date(d)
-                )
-                btn.grid(row=row, column=col, pady=1)
-                col += 1
-                if col > 6:
-                    col = 0
-                    row += 1
-        
-        def prev_month():
-            if month_var.get() == 1:
-                month_var.set(12)
-                year_var.set(year_var.get() - 1)
-            else:
-                month_var.set(month_var.get() - 1)
-            update_calendar()
-        
-        def next_month():
-            if month_var.get() == 12:
-                month_var.set(1)
-                year_var.set(year_var.get() + 1)
-            else:
-                month_var.set(month_var.get() + 1)
-            update_calendar()
-        
-        def select_date(day):
-            date_str = f"{day:02d}/{month_var.get():02d}/{year_var.get()}"
+        def on_date_selected(date_obj):
+            date_str = date_obj.strftime("%d/%m/%Y")
             if target == "start":
                 self.start_date_var.set(date_str)
             else:
                 self.end_date_var.set(date_str)
-            cal_window.destroy()
-        
-        # Navigation
-        ttk.Button(nav_frame, text="◀", width=3, command=prev_month).pack(side=tk.LEFT)
-        
-        month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        month_label = ttk.Label(nav_frame, text=f"{month_names[month_var.get()]} {year_var.get()}", font=("Segoe UI", 11, "bold"))
-        month_label.pack(side=tk.LEFT, expand=True)
-        
-        def update_label():
-            month_label.config(text=f"{month_names[month_var.get()]} {year_var.get()}")
-        
-        ttk.Button(nav_frame, text="▶", width=3, command=lambda: [next_month(), update_label()]).pack(side=tk.RIGHT)
-        
-        # Days grid
-        days_frame = ttk.Frame(cal_window, padding="10")
-        days_frame.pack(fill=tk.BOTH, expand=True)
-        
-        update_calendar()
+                
+        CalendarDialog(self.root, on_date_selected, current)
     
     def _update_all_texts(self):
         """Update all UI text to current language"""
