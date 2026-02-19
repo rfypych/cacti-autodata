@@ -174,7 +174,7 @@ Alur logika dari mulai sampai data tersimpan:
 flowchart TD
     Start([Mulai]) --> CheckCookie{Cookie Valid?}
     
-    CheckCookie -- No --> Login[Input Cookie Manual\n(di GUI Settings)]
+    CheckCookie -- No --> Login["Input Cookie Manual\n(di GUI Settings)"]
     Login --> SaveCookie[Simpan ke JSON]
     SaveCookie --> CheckCookie
     
