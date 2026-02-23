@@ -743,6 +743,71 @@ class CactiScraper:
         self._update_progress(f"Selesai mengambil {len(all_data)} data!", 85)
         return all_data
 
+    def scrape_daily_peak_for_form(self, dates: List[str]) -> List[Dict]:
+        """
+        Khusus untuk Google Form: mengambil Absolute Peak (Max Out) 24 jam per tanggal.
+        Mengabaikan time_slots (09:00/16:00) dan mengambil data langsung 00:00 - 23:59.
+        """
+        all_data = []
+        session = self._setup_requests_session()
+        
+        total_iterations = len(dates) * len(config.GRAPH_IDS)
+        current_iteration = 0
+        
+        self._update_progress(f"Mengambil Data 24-Jam Penuh untuk {len(dates)} Tanggal...", 10)
+        
+        for date_str in dates:
+            try:
+                # Assuming date_str is "DD/MM/YYYY" or matches EXCEL config format
+                current_date = datetime.strptime(date_str.strip(), "%d/%m/%Y")
+            except ValueError:
+                self._update_progress(f"Format tanggal salah: {date_str}, pastikan DD/MM/YYYY")
+                continue
+                
+            # Skip weekend if configured
+            if config.SKIP_WEEKENDS and current_date.weekday() >= 5: # 5=Sat, 6=Sun
+                # Still increment iterations so progress bar advances
+                current_iteration += len(config.GRAPH_IDS)
+                self._update_progress(f"📅 {date_str} adalah Weekend (Dilewati)", -1)
+                continue
+                
+            # Full 24-hour range
+            from_dt = current_date.replace(hour=0, minute=0, second=0)
+            to_dt = current_date.replace(hour=23, minute=59, second=59)
+            
+            start_ts = int(from_dt.timestamp())
+            end_ts = int(to_dt.timestamp())
+            
+            for interface_name, graph_id in config.GRAPH_IDS.items():
+                current_iteration += 1
+                progress = 10 + int((current_iteration / total_iterations) * 80)
+                
+                self._update_progress(
+                    f"Tarik 24-Jam {date_str} - {interface_name}...", 
+                    progress
+                )
+                
+                csv_data = self._get_csv_data(session, graph_id, start_ts, end_ts)
+                if not csv_data:
+                    self._update_progress(f"  ✗ {interface_name}: gagal ambil data")
+                    continue
+                    
+                stats = self._calculate_stats_from_csv(csv_data['rows'], csv_data['header'])
+                if stats:
+                    all_data.append({
+                        "date": date_str,
+                        "interface": interface_name,
+                        "sheet": config.INTERFACE_TO_SHEET.get(interface_name, interface_name),
+                        "max_in": stats.get('max_in', '0'),
+                        "max_out": stats.get('max_out', '0'),
+                    })
+                    self._update_progress(f"  ✓ {interface_name}: OK (Peak Out: {stats.get('max_out')})")
+                else:
+                    self._update_progress(f"  ✗ {interface_name}: tidak ada data di CSV")
+                    
+        self._update_progress("Selesai menarik data 24-jam.", 100)
+        return all_data
+
 
 def run_scraper(start_date: datetime, end_date: datetime, 
                 progress_callback: Optional[Callable] = None,

@@ -206,6 +206,10 @@ class CactiAutoDataGUI:
         # Variables
         self.start_date_var = tk.StringVar(value=self.settings.get("last_start_date") or datetime.now().strftime("%d/%m/%Y"))
         self.end_date_var = tk.StringVar(value=self.settings.get("last_end_date") or datetime.now().strftime("%d/%m/%Y"))
+        
+        # Form upload vars
+        self.upload_start_date_var = tk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
+        self.upload_end_date_var = tk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
         self.excel_path_var = tk.StringVar(value=self.settings.get("last_excel_path", ""))
         self.status_var = tk.StringVar(value=get_text("status_waiting", self.current_lang))
         self.progress_var = tk.DoubleVar(value=0)
@@ -576,11 +580,17 @@ class CactiAutoDataGUI:
     def _show_calendar(self, target: str):
         """Show improved date picker dialog"""
         # Get current date from entry
+        if target == "start":
+            current_str = self.start_date_var.get()
+        elif target == "upload_start":
+            current_str = self.upload_start_date_var.get()
+        elif target == "upload_end":
+            current_str = self.upload_end_date_var.get()
+        else:
+            current_str = self.end_date_var.get()
+        
         try:
-            if target == "start":
-                current = datetime.strptime(self.start_date_var.get(), "%d/%m/%Y")
-            else:
-                current = datetime.strptime(self.end_date_var.get(), "%d/%m/%Y")
+            current = datetime.strptime(current_str, "%d/%m/%Y")
         except:
             current = datetime.now()
             
@@ -588,6 +598,10 @@ class CactiAutoDataGUI:
             date_str = date_obj.strftime("%d/%m/%Y")
             if target == "start":
                 self.start_date_var.set(date_str)
+            elif target == "upload_start":
+                self.upload_start_date_var.set(date_str)
+            elif target == "upload_end":
+                self.upload_end_date_var.set(date_str)
             else:
                 self.end_date_var.set(date_str)
                 
@@ -620,38 +634,61 @@ class CactiAutoDataGUI:
             
         ttk.Button(map_frame, text="🔍 Auto Detect IDs\n(via Internet)", command=self._auto_detect_form_ids).grid(row=1, column=2, rowspan=5, padx=10)
         
+        # Data Source / Scraping Frame
+        scrape_frame = ttk.LabelFrame(self.upload_frame, text="📅 Pilihan Waktu (Scraping Max Out 24-Jam)", padding="10")
+        scrape_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        ttk.Label(scrape_frame, text="Mulai:", font=("Segoe UI", 9)).grid(row=0, column=0, sticky=tk.W, pady=3)
+        self.upload_start_entry = ttk.Entry(scrape_frame, textvariable=self.upload_start_date_var, width=15)
+        self.upload_start_entry.grid(row=0, column=1, padx=(5, 2))
+        ttk.Button(scrape_frame, text="📅", width=3, command=lambda: self._show_calendar("upload_start")).grid(row=0, column=2)
+        
+        ttk.Label(scrape_frame, text="Sampai:", font=("Segoe UI", 9)).grid(row=0, column=3, sticky=tk.W, padx=(20,0), pady=3)
+        self.upload_end_entry = ttk.Entry(scrape_frame, textvariable=self.upload_end_date_var, width=15)
+        self.upload_end_entry.grid(row=0, column=4, padx=(5, 2))
+        ttk.Button(scrape_frame, text="📅", width=3, command=lambda: self._show_calendar("upload_end")).grid(row=0, column=5)
+        
+        ttk.Button(scrape_frame, text="🔍 Tarik Data 24-Jam & Preview", command=self._run_form_preview_thread).grid(row=0, column=6, padx=20)
+        
+        # Preview Form Frame
+        preview_frame = ttk.LabelFrame(self.upload_frame, text="👁️ Preview Hasil Agregasi Harian (Siap Upload)", padding="10")
+        preview_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        
+        columns = ('Upload?', 'Tanggal', 'Total Kapasitas', 'Moratel', 'Iforte', 'Telkom', 'Status Upload')
+        self.form_preview_tree = ttk.Treeview(preview_frame, columns=columns, show='headings', height=6)
+        
+        # Format columns
+        self.form_preview_tree.heading('Upload?', text='Upload?')
+        self.form_preview_tree.column('Upload?', width=70, anchor=tk.CENTER)
+        
+        for col in columns[1:]:
+            self.form_preview_tree.heading(col, text=col)
+            self.form_preview_tree.column(col, width=100, anchor=tk.CENTER)
+            
+        # Bind click event for checkbox toggling
+        self.form_preview_tree.bind('<ButtonRelease-1>', self._toggle_form_preview_checkbox)
+            
+        tree_scroll = ttk.Scrollbar(preview_frame, orient=tk.VERTICAL, command=self.form_preview_tree.yview)
+        self.form_preview_tree.configure(yscrollcommand=tree_scroll.set)
+        
+        self.form_preview_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Default empty text
+        self.form_preview_tree.insert('', 'end', values=("-", "Klik 'Tarik Data & Preview'", "...", "...", "...", "...", "Menunggu Tarik Data"))
+        
         # Action Frame
         action_frame = ttk.Frame(self.upload_frame, padding="10")
         action_frame.pack(fill=tk.X, pady=(10, 0))
         
-        # New Listbox Frame for Dates
-        date_frame = ttk.LabelFrame(action_frame, text="📅 Pilih Tanggal Upload", padding="10")
-        date_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-        
-        ttk.Label(date_frame, text="Pilih tanggal yang ingin di-upload (Tahan Ctrl untuk pilih banyak):", 
-                  font=("Segoe UI", 9)).pack(anchor=tk.W, pady=(0, 5))
-        
-        # Scrollable Listbox
-        list_scroll = ttk.Scrollbar(date_frame)
-        list_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        self.upload_dates_listbox = tk.Listbox(date_frame, selectmode=tk.MULTIPLE, height=12, yscrollcommand=list_scroll.set, font=("Consolas", 10))
-        self.upload_dates_listbox.pack(fill=tk.BOTH, expand=True)
-        list_scroll.config(command=self.upload_dates_listbox.yview)
-        
-        btn_frame = ttk.Frame(action_frame)
-        btn_frame.pack(fill=tk.X)
-        
-        ttk.Button(btn_frame, text="📂 Load Data dari Excel...", command=self._load_data_from_excel_files).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(btn_frame, text="▶️ Upload Tanggal Terpilih", command=self._run_upload_thread).pack(side=tk.LEFT)
-        ttk.Button(btn_frame, text="Pilih Semua", command=lambda: self.upload_dates_listbox.selection_set(0, tk.END)).pack(side=tk.LEFT, padx=(10, 5))
-        ttk.Button(btn_frame, text="Batal Pilih Semua", command=lambda: self.upload_dates_listbox.selection_clear(0, tk.END)).pack(side=tk.LEFT)
+        self.btn_form_upload = ttk.Button(action_frame, text="▶️ Upload ke Google Form", command=self._run_upload_thread, state=tk.DISABLED)
+        self.btn_form_upload.pack(side=tk.LEFT)
         
         # Log frame
         log_frame = ttk.LabelFrame(self.upload_frame, text="📋 Upload Log", padding="10")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         
-        self.upload_log = tk.Text(log_frame, height=10, state=tk.DISABLED, bg="#f8f9fa")
+        self.upload_log = tk.Text(log_frame, height=5, state=tk.DISABLED, bg="#f8f9fa")
         self.upload_log.pack(fill=tk.BOTH, expand=True)
 
     def _log_upload(self, msg: str):
@@ -727,143 +764,188 @@ class CactiAutoDataGUI:
         import threading
         threading.Thread(target=task, daemon=True).start()
 
-    def _update_upload_listbox(self):
-        """Update Listbox with unique dates from scraped data"""
-        if not hasattr(self, 'upload_dates_listbox'): return
+    def _run_form_preview_thread(self):
+        """Action handler for 'Tarik Data 24-Jam & Preview' button"""
+        start_str = self.upload_start_date_var.get()
+        end_str = self.upload_end_date_var.get()
         
-        self.upload_dates_listbox.delete(0, tk.END)
-        if not hasattr(self, 'scraped_data') or not self.scraped_data: return
-        
-        # Get unique dates preserving order
-        seen = set()
-        unique_dates = []
-        for d in self.scraped_data:
-            date_str = d.get('date')
-            if date_str and date_str not in seen:
-                seen.add(date_str)
-                unique_dates.append(date_str)
-                
-        # Insert items and apply striped colors
-        for idx, date_str in enumerate(unique_dates):
-            self.upload_dates_listbox.insert(tk.END, f"  {date_str}  ")
-            # Alternating colors: light grey and white for higher contrast
-            bg_color = "#e8e8e8" if idx % 2 == 0 else "#ffffff"
-            self.upload_dates_listbox.itemconfig(idx, {'bg': bg_color})
-            
-        # Select all by default
-        self.upload_dates_listbox.selection_set(0, tk.END)
-
-    def _load_data_from_excel_files(self):
-        """Ask user for Excel files and load them into scraped_data format"""
-        file_paths = filedialog.askopenfilenames(
-            title="Pilih File Excel (Bisa pilih lebih dari satu)",
-            filetypes=[("Excel Files", "*.xlsx")]
-        )
-        
-        if not file_paths:
+        try:
+            start_date = datetime.strptime(start_str, "%d/%m/%Y")
+            end_date = datetime.strptime(end_str, "%d/%m/%Y")
+        except ValueError:
+            messagebox.showerror("Error", "Format tanggal salah. Gunakan DD/MM/YYYY")
             return
             
-        import openpyxl
-        self._log_upload(f"Memproses {len(file_paths)} file Excel...")
+        if start_date > end_date:
+            messagebox.showerror("Error", "Tanggal mulai tidak boleh lebih besar dari tanggal akhir.")
+            return
+            
+        # Clear preview
+        for item in self.form_preview_tree.get_children():
+            self.form_preview_tree.delete(item)
+        self.form_preview_tree.insert('', 'end', values=("Mengambil data...", "Mohon tunggu...", "", "", "", ""))
+        self.btn_form_upload.config(state=tk.DISABLED)
         
-        all_data = []
+        import threading
+        threading.Thread(target=self._form_preview_task, args=(start_date, end_date), daemon=True).start()
         
-        for path in file_paths:
-            try:
-                wb = openpyxl.load_workbook(path, data_only=True)
-                for sheet_name in wb.sheetnames:
-                    # Skip metadata sheet
-                    if sheet_name == "Metadata":
-                        continue
-                        
-                    ws = wb[sheet_name]
-                    # Asumsi format excel dari tools ini (row 3 ke bawah ada data)
-                    for row_idx in range(3, ws.max_row + 1):
-                        date_val = ws.cell(row=row_idx, column=config.EXCEL_COL_TANGGAL).value
-                        time_val = ws.cell(row=row_idx, column=config.EXCEL_COL_WAKTU).value
-                        if not date_val: 
-                            continue # skip empty rows
-                            
-                        max_in = ws.cell(row=row_idx, column=config.EXCEL_COL_MAX_IN).value or "0"
-                        max_out = ws.cell(row=row_idx, column=config.EXCEL_COL_MAX_OUT).value or "0"
-                        
-                        # Handle datetime objects
-                        if isinstance(date_val, datetime):
-                            date_str = date_val.strftime(config.DATE_FORMAT_EXCEL)
-                        else:
-                            date_str = str(date_val)
-                            
-                        if isinstance(time_val, datetime):
-                            time_str = time_val.strftime(config.TIME_FORMAT_EXCEL)
-                        else:
-                            time_str = str(time_val).replace(':', '.') # normalize back
-                            
-                        # Build dict mapping expected by aggregator
-                        all_data.append({
-                            'sheet': sheet_name,
-                            'date': date_str,
-                            'time': time_str,
-                            'max_in': str(max_in),
-                            'max_out': str(max_out)
-                        })
-                        
-            except Exception as e:
-                self._log_upload(f"Error membaca '{os.path.basename(path)}': {str(e)}")
-                
-        if all_data:
-            self.scraped_data = all_data
-            self._update_upload_listbox()
-            self._log_upload(f"Berhasil me-load {len(all_data)} baris data dari Excel.")
-            messagebox.showinfo("Load Sukses", f"Berhasil memuat data dari {len(file_paths)} file Excel.\nSilakan pilih tanggal yang ingin diupload di daftar.")
+    def _form_preview_task(self, start_date, end_date):
+        self.root.after(0, lambda: self._log_upload("========= MULAI PREVIEW 24-JAM ========="))
+        from scraper import CactiScraper
+        
+        scraper = CactiScraper(progress_callback=lambda msg, pct: self.root.after(0, lambda: self._log_upload(msg)))
+        
+        # Generate list of dates
+        dates_to_scrape = []
+        curr = start_date
+        while curr <= end_date:
+            dates_to_scrape.append(curr.strftime("%d/%m/%Y"))
+            curr += timedelta(days=1)
+            
+        self.root.after(0, lambda: self._log_upload(f"Menarik detail 24-Jam untuk {len(dates_to_scrape)} hari..."))
+        
+        try:
+            raw_data = scraper.scrape_daily_peak_for_form(dates_to_scrape)
+            
+            # Aggregate them to calculate total
+            from form_submitter import GoogleFormSubmitter
+            # Fake submitter just to use its aggregator
+            dummy_submitter = GoogleFormSubmitter("", {})
+            aggregated = dummy_submitter.aggregate_daily_data(raw_data)
+            
+            self.form_scraped_data = raw_data # Save for actual upload later
+            
+            self.root.after(0, lambda: self._update_form_preview_table(aggregated))
+        except Exception as e:
+            self.root.after(0, lambda: self._log_upload(f"⚠️ Terjadi error: {str(e)}"))
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Gagal menarik data Preview: {str(e)}"))
+
+    def _toggle_form_preview_checkbox(self, event):
+        """Toggle [x] vs [ ] in the Upload? column when clicked"""
+        region = self.form_preview_tree.identify_region(event.x, event.y)
+        if region != "cell": return
+        
+        column = self.form_preview_tree.identify_column(event.x)
+        if column != '#1': return # Hanya izinkan klik di kolom 1 (Upload?)
+        
+        item = self.form_preview_tree.identify_row(event.y)
+        if not item: return
+        
+        values = list(self.form_preview_tree.item(item, "values"))
+        if len(values) == 0 or values[0] == "-": return # Header empty/loading state
+        
+        # Toggle
+        if values[0] == "[x]":
+            values[0] = "[ ]"
+            values[6] = "Dilewati (Skip)"
         else:
-            messagebox.showwarning("Load Gagal", "Tidak ada data bandwith valid yang ditemukan dari file yang dipilih.")
+            values[0] = "[x]"
+            values[6] = "✓ Siap Upload"
+            
+        self.form_preview_tree.item(item, values=values)
+
+    def _update_form_preview_table(self, aggregated: dict):
+        from form_submitter import format_mbps
+        
+        # Clear current tree
+        for item in self.form_preview_tree.get_children():
+            self.form_preview_tree.delete(item)
+            
+        if not aggregated:
+            self.form_preview_tree.insert('', 'end', values=("-", "Tidak ada data", "-", "-", "-", "-", "-"))
+            return
+            
+        for date_str, isps in aggregated.items():
+            moratel_val = 0.0
+            iforte_val = 0.0
+            telkom_val = 0.0
+            
+            for k, v in isps.items():
+                k_low = k.lower()
+                if "moratel" in k_low: 
+                    moratel_val = v
+                elif "iforte" in k_low: 
+                    iforte_val = v
+                elif "telkom" in k_low: 
+                    telkom_val = v
+                    
+            total_val = moratel_val + iforte_val + telkom_val
+            
+            self.form_preview_tree.insert('', 'end', values=(
+                "[x]", # Default checked
+                date_str, 
+                format_mbps(total_val), 
+                format_mbps(moratel_val), 
+                format_mbps(iforte_val), 
+                format_mbps(telkom_val), 
+                "✓ Siap Upload"
+            ))
+            
+        self.btn_form_upload.config(state=tk.NORMAL)
+        self._log_upload("✅ Preview siap. Hilangkan centang [x] untuk melewati hari tertentu.")
 
     def _run_upload_thread(self):
-        if not hasattr(self, 'scraped_data') or not self.scraped_data:
-            messagebox.showerror("Error", "Belum ada data! Lakukan proses scraping (Klik START) terlebih dahulu di tab Main sebelum upload.")
+        if not hasattr(self, 'form_scraped_data') or not self.form_scraped_data:
+            messagebox.showerror("Error", "Belum ada data Preview! Silakan 'Tarik Data & Preview' terlebih dahulu.")
             return
-            
-        selected_indices = self.upload_dates_listbox.curselection()
-        if not selected_indices:
-            messagebox.showwarning("Peringatan", "Pilih minimal satu tanggal dari daftar sebelum upload!")
-            return
-            
-        # Strip the padding spaces added for UI
-        selected_dates = [self.upload_dates_listbox.get(i).strip() for i in selected_indices]
             
         import threading
-        threading.Thread(target=self._upload_task, args=(selected_dates,), daemon=True).start()
+        threading.Thread(target=self._upload_task, daemon=True).start()
         
-    def _upload_task(self, selected_dates):
+    def _upload_task(self):
         is_dry_run = self.dry_run_var.get()
         mode_str = " (TEST MODE / DRY RUN)" if is_dry_run else ""
-        self.root.after(0, lambda: self._log_upload(f"========= MULAI UPLOAD ({len(selected_dates)} TANGGAL){mode_str} ========="))
+        self.root.after(0, lambda: self._log_upload(f"========= MULAI UPLOAD{mode_str} ========="))
         
         from form_submitter import GoogleFormSubmitter
         url = self.form_url_var.get()
         mapping = {k: v.get() for k, v in self.form_entries.items()}
         
         submitter = GoogleFormSubmitter(url, mapping)
-        self.root.after(0, lambda: self._log_upload("Menghitung agregasi harian..."))
+        self.root.after(0, lambda: self._log_upload("Mengirim data..."))
         
         try:
-            # Filter data by selected dates
-            filtered_data = [d for d in self.scraped_data if d.get('date') in selected_dates]
+            # Filter form_scraped_data based on checked rows in treeview
+            checked_dates = []
+            for item in self.form_preview_tree.get_children():
+                values = self.form_preview_tree.item(item, "values")
+                if values and values[0] == "[x]":
+                    checked_dates.append(values[1]) # Index 1 is Date
+                    
+            if not checked_dates:
+                self.root.after(0, lambda: messagebox.showwarning("Peringatan", "Tidak ada tanggal yang dicentang untuk diupload!"))
+                self.root.after(0, lambda: self._log_upload("Dibatalkan: Tidak ada hari yang dipilih [x]."))
+                return
+                
+            filtered_data = [d for d in self.form_scraped_data if d.get('date') in checked_dates]
             
             results = submitter.submit_all(filtered_data, dry_run=is_dry_run)
             success_count = 0
             
+            # Update treeview and log
             for date_str, success, msg in results:
                 status_icon = "✅" if success else "❌"
                 log_msg = f"{status_icon} Tanggal {date_str}: {msg}"
                 self.root.after(0, lambda m=log_msg: self._log_upload(m))
                 if success: success_count += 1
                 
+                # Update treeview status col
+                self.root.after(0, lambda d=date_str, m=msg: self._update_treeview_status(d, m))
+                
             self.root.after(0, lambda: self._log_upload(f"Selesai! {success_count} / {len(results)} tanggal berhasil diupload."))
-            self.root.after(0, lambda: messagebox.showinfo("Upload Selesai", f"Berhasil mengunggah {success_count} baris data harian ke form."))
+            if success_count > 0 and not is_dry_run:
+                self.root.after(0, lambda: messagebox.showinfo("Upload Selesai", f"Berhasil mengunggah {success_count} baris data harian ke form."))
         except Exception as e:
             self.root.after(0, lambda: self._log_upload(f"⚠️ Terjadi error fatal: {str(e)}"))
             self.root.after(0, lambda: messagebox.showerror("Error", f"Terjadi error saat upload: {str(e)}"))
+
+    def _update_treeview_status(self, date_str, msg):
+        for item in self.form_preview_tree.get_children():
+            values = list(self.form_preview_tree.item(item, "values"))
+            if len(values) > 1 and values[1] == date_str:
+                values[6] = msg
+                self.form_preview_tree.item(item, values=values)
+                break
     
     def _update_all_texts(self):
         """Update all UI text to current language"""
