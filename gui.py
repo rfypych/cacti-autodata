@@ -477,11 +477,9 @@ class CactiAutoDataGUI:
         data_frame = ttk.LabelFrame(self.settings_frame, text="📊 Data & Output Rules", padding="10")
         data_frame.pack(fill=tk.X, pady=(0, 10))
         
-        self.skip_weekend_var = tk.BooleanVar(value=self.settings.get("skip_weekends", config.SKIP_WEEKENDS))
-        ttk.Checkbutton(data_frame, text="Skip Weekend (Sabtu & Minggu tidak diambil)", variable=self.skip_weekend_var).pack(anchor=tk.W)
+        ttk.Checkbutton(data_frame, text="Skip Weekend (Sabtu & Minggu tidak diambil)", variable=self.skip_weekends_var).pack(anchor=tk.W)
         
-        self.skip_holiday_settings_var = tk.BooleanVar(value=self.settings.get("skip_holidays", config.SKIP_HOLIDAYS))
-        ttk.Checkbutton(data_frame, text="Skip Hari Libur Nasional (Tanggal Merah)", variable=self.skip_holiday_settings_var).pack(anchor=tk.W)
+        ttk.Checkbutton(data_frame, text="Skip Hari Libur Nasional (Tanggal Merah)", variable=self.skip_holidays_var).pack(anchor=tk.W)
         
         self.include_metadata_var = tk.BooleanVar(value=self.settings.get("include_metadata", config.INCLUDE_METADATA))
         ttk.Checkbutton(data_frame, text="Include Metadata (Sheet info tambahan di Excel)", variable=self.include_metadata_var).pack(anchor=tk.W)
@@ -800,8 +798,11 @@ class CactiAutoDataGUI:
         # Clear preview
         for item in self.form_preview_tree.get_children():
             self.form_preview_tree.delete(item)
-        self.form_preview_tree.insert('', 'end', values=("Mengambil data...", "Mohon tunggu...", "", "", "", ""))
+        self.form_preview_tree.insert('', 'end', values=("Mengambil data...", "Mohon tunggu...", "", "", "", "", ""))
         self.btn_form_upload.config(state=tk.DISABLED)
+        
+        # Apply GUI settings to config so holiday skips work
+        self._apply_settings_to_config()
         
         import threading
         threading.Thread(target=self._form_preview_task, args=(start_date, end_date), daemon=True).start()
@@ -1124,8 +1125,8 @@ class CactiAutoDataGUI:
         # config.SHOW_BROWSER = self.show_browser_var.get()
         
         # Apply new settings
-        config.SKIP_WEEKENDS = self.skip_weekend_var.get()
-        config.SKIP_HOLIDAYS = self.skip_holiday_settings_var.get()
+        config.SKIP_WEEKENDS = self.skip_weekends_var.get()
+        config.SKIP_HOLIDAYS = self.skip_holidays_var.get()
         config.INCLUDE_METADATA = self.include_metadata_var.get()
         
         # URL
@@ -1399,8 +1400,8 @@ class CactiAutoDataGUI:
             "time_format": self.time_format_var.get(),
             "interface_mapping": {k: v.get() for k, v in self.mapping_vars.items()},
             "selected_sheets": {k: v.get() for k, v in self.sheet_vars.items()},
-            "skip_weekends": self.skip_weekend_var.get(),
-            "skip_holidays": self.skip_holiday_settings_var.get(),
+            "skip_weekends": self.skip_weekends_var.get(),
+            "skip_holidays": self.skip_holidays_var.get(),
             "include_metadata": self.include_metadata_var.get(),
             "dry_run_mode": self.dry_run_var.get(),
             "language": self.current_lang,
