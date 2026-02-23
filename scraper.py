@@ -63,8 +63,8 @@ class CactiScraper:
                 continue
                 
             # Skip holidays if configured
-            if config.SKIP_HOLIDAYS and current in self.id_holidays:
-                holiday_name = self.id_holidays.get(current)
+            if config.SKIP_HOLIDAYS and current.date() in self.id_holidays:
+                holiday_name = self.id_holidays.get(current.date())
                 self._update_progress(f"🏖️ Skip Libur Nasional: {current.strftime('%d/%m/%Y')} ({holiday_name})", -1)
                 current += timedelta(days=1)
                 continue
@@ -709,8 +709,8 @@ class CactiScraper:
                 continue
                 
             # Skip holiday if configured
-            if config.SKIP_HOLIDAYS and current_date in self.id_holidays:
-                holiday_name = self.id_holidays.get(current_date)
+            if config.SKIP_HOLIDAYS and current_date.date() in self.id_holidays:
+                holiday_name = self.id_holidays.get(current_date.date())
                 # Update progress for skipped days
                 skipped_iterations = len(config.TIME_SLOTS) * len(config.GRAPH_IDS)
                 current_iteration += skipped_iterations
@@ -795,8 +795,8 @@ class CactiScraper:
                 continue
                 
             # Skip holidays if configured
-            if config.SKIP_HOLIDAYS and current_date in self.id_holidays:
-                holiday_name = self.id_holidays.get(current_date)
+            if config.SKIP_HOLIDAYS and current_date.date() in self.id_holidays:
+                holiday_name = self.id_holidays.get(current_date.date())
                 # Increment iteration theoretically to keep progress bar moving
                 current_iteration += len(config.GRAPH_IDS) * len(config.TIME_SLOTS)
                 self._update_progress(f"🎆 {date_str} Libur Nasional: {holiday_name} (Dilewati)", -1)
