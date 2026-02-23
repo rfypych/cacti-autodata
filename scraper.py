@@ -27,6 +27,7 @@ except ImportError:
     HAS_SELENIUM = False
 
 import config
+import holidays
 
 
 class CactiScraper:
@@ -42,6 +43,8 @@ class CactiScraper:
         self.driver = None
         self.progress_callback = progress_callback or (lambda msg, pct: None)
         self.attached_to_existing = False
+        # Load Indonesian holidays
+        self.id_holidays = holidays.country_holidays('ID')
     
     def _update_progress(self, message: str, percentage: int = -1):
         """Update progress via callback"""
@@ -56,6 +59,13 @@ class CactiScraper:
         while current <= end_date:
             # Skip weekends if configured
             if config.SKIP_WEEKENDS and current.weekday() >= 5:
+                current += timedelta(days=1)
+                continue
+                
+            # Skip holidays if configured
+            if config.SKIP_HOLIDAYS and current in self.id_holidays:
+                holiday_name = self.id_holidays.get(current)
+                self._update_progress(f"🏖️ Skip Libur Nasional: {current.strftime('%d/%m/%Y')} ({holiday_name})", -1)
                 current += timedelta(days=1)
                 continue
                 
@@ -693,7 +703,19 @@ class CactiScraper:
                 skipped_iterations = len(config.TIME_SLOTS) * len(config.GRAPH_IDS)
                 current_iteration += skipped_iterations
                 
-                self._update_progress(f"📅 {current_date.strftime('%d/%m/%Y')} adalah Weekend (Skip)", -1)
+                self._update_progress(f"🏖️ {current_date.strftime('%d/%m/%Y')} adalah Weekend (Skip)", -1)
+                
+                current_date += timedelta(days=1)
+                continue
+                
+            # Skip holiday if configured
+            if config.SKIP_HOLIDAYS and current_date in self.id_holidays:
+                holiday_name = self.id_holidays.get(current_date)
+                # Update progress for skipped days
+                skipped_iterations = len(config.TIME_SLOTS) * len(config.GRAPH_IDS)
+                current_iteration += skipped_iterations
+                
+                self._update_progress(f"🎆 {current_date.strftime('%d/%m/%Y')} Libur Nasional: {holiday_name} (Skip)", -1)
                 
                 current_date += timedelta(days=1)
                 continue
@@ -766,9 +788,19 @@ class CactiScraper:
                 
             # Skip weekend if configured
             if config.SKIP_WEEKENDS and current_date.weekday() >= 5: # 5=Sat, 6=Sun
-                # Still increment iterations so progress bar advances
-                current_iteration += len(config.GRAPH_IDS)
-                self._update_progress(f"📅 {date_str} adalah Weekend (Dilewati)", -1)
+                # Increment iteration theoretically to keep progress bar moving
+                current_iteration += len(config.GRAPH_IDS) * len(config.TIME_SLOTS)
+                self._update_progress(f"🏖️ {date_str} adalah Weekend (Dilewati)", -1)
+                current_date += timedelta(days=1)
+                continue
+                
+            # Skip holidays if configured
+            if config.SKIP_HOLIDAYS and current_date in self.id_holidays:
+                holiday_name = self.id_holidays.get(current_date)
+                # Increment iteration theoretically to keep progress bar moving
+                current_iteration += len(config.GRAPH_IDS) * len(config.TIME_SLOTS)
+                self._update_progress(f"🎆 {date_str} Libur Nasional: {holiday_name} (Dilewati)", -1)
+                current_date += timedelta(days=1)
                 continue
                 
             # Full 24-hour range

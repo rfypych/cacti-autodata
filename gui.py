@@ -217,6 +217,8 @@ class CactiAutoDataGUI:
         # Mode variables
         self.dry_run_var = tk.BooleanVar(value=self.settings.get("dry_run_mode", False))
         self.skip_filled_var = tk.BooleanVar(value=self.settings.get("skip_filled_rows", True))
+        self.skip_weekends_var = tk.BooleanVar(value=self.settings.get("skip_weekends", config.SKIP_WEEKENDS))
+        self.skip_holidays_var = tk.BooleanVar(value=self.settings.get("skip_holidays", config.SKIP_HOLIDAYS))
         
         # Sheet selection variables
         self.sheet_vars = {}
@@ -356,6 +358,18 @@ class CactiAutoDataGUI:
         
         ttk.Checkbutton(
             options_frame, 
+            text="🏖️ Skip weekend (Sabtu/Minggu)", 
+            variable=self.skip_weekends_var
+        ).pack(anchor=tk.W)
+        
+        ttk.Checkbutton(
+            options_frame, 
+            text="🎆 Skip Hari Libur Nasional (Tanggal Merah)", 
+            variable=self.skip_holidays_var
+        ).pack(anchor=tk.W)
+        
+        ttk.Checkbutton(
+            options_frame, 
             text="🧪 Dry Run Mode (preview only, tidak menulis ke Excel)", 
             variable=self.dry_run_var
         ).pack(anchor=tk.W)
@@ -465,6 +479,9 @@ class CactiAutoDataGUI:
         
         self.skip_weekend_var = tk.BooleanVar(value=self.settings.get("skip_weekends", config.SKIP_WEEKENDS))
         ttk.Checkbutton(data_frame, text="Skip Weekend (Sabtu & Minggu tidak diambil)", variable=self.skip_weekend_var).pack(anchor=tk.W)
+        
+        self.skip_holiday_settings_var = tk.BooleanVar(value=self.settings.get("skip_holidays", config.SKIP_HOLIDAYS))
+        ttk.Checkbutton(data_frame, text="Skip Hari Libur Nasional (Tanggal Merah)", variable=self.skip_holiday_settings_var).pack(anchor=tk.W)
         
         self.include_metadata_var = tk.BooleanVar(value=self.settings.get("include_metadata", config.INCLUDE_METADATA))
         ttk.Checkbutton(data_frame, text="Include Metadata (Sheet info tambahan di Excel)", variable=self.include_metadata_var).pack(anchor=tk.W)
@@ -1108,6 +1125,7 @@ class CactiAutoDataGUI:
         
         # Apply new settings
         config.SKIP_WEEKENDS = self.skip_weekend_var.get()
+        config.SKIP_HOLIDAYS = self.skip_holiday_settings_var.get()
         config.INCLUDE_METADATA = self.include_metadata_var.get()
         
         # URL
@@ -1382,6 +1400,7 @@ class CactiAutoDataGUI:
             "interface_mapping": {k: v.get() for k, v in self.mapping_vars.items()},
             "selected_sheets": {k: v.get() for k, v in self.sheet_vars.items()},
             "skip_weekends": self.skip_weekend_var.get(),
+            "skip_holidays": self.skip_holiday_settings_var.get(),
             "include_metadata": self.include_metadata_var.get(),
             "dry_run_mode": self.dry_run_var.get(),
             "language": self.current_lang,
@@ -1409,8 +1428,8 @@ class CactiAutoDataGUI:
             "last_end_date": self.end_date_var.get(),
             "selected_sheets": {k: v.get() for k, v in self.sheet_vars.items()},
             "skip_filled_rows": self.skip_filled_var.get(),
-            "skip_weekends": self.skip_weekend_var.get(),
-            "include_metadata": self.include_metadata_var.get(),
+            "skip_weekends": self.skip_weekends_var.get(),
+            "skip_holidays": self.skip_holidays_var.get(),
             "dry_run_mode": self.dry_run_var.get(),
         })
     

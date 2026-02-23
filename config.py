@@ -27,6 +27,9 @@ GRAPH_IDS = {
     "Moratel": "1528",
 }
 
+# ==== Scraping Options ====
+SKIP_WEEKENDS = True  # Default value, can be changed via GUI settings
+SKIP_HOLIDAYS = False # Default value, can be changed via GUI settings
 # Slot waktu yang akan diambil datanya
 # Format: (jam, menit)
 TIME_SLOTS = [

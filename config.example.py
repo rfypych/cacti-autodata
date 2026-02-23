@@ -18,6 +18,10 @@ INTERFACE_TO_SHEET = {
     "Moratel": "Moratel",
 }
 
+# ==== Scraping Options ====
+SKIP_WEEKENDS = True  # Default value, can be changed via GUI settings
+SKIP_HOLIDAYS = False # Default value, can be changed via GUI settings
+
 # Slot waktu yang akan diambil datanya
 TIME_SLOTS = [
     (9, 0),   # 09.00
