@@ -37,8 +37,25 @@ EXCEL_COL_AVG_IN = 7     # Kolom G
 EXCEL_COL_AVG_OUT = 8    # Kolom H
 
 # ============================================================
-# FORMAT WAKTU & TANGGAL DI EXCEL
+# KONFIGURASI GOOGLE FORM (UPLOAD OTOMATIS)
 # ============================================================
+# URL Google Form (pastikan URL yang berakhiran /viewform)
+GOOGLE_FORM_URL = ""
+
+# Mapping ID Isian Form (dapatkan via Inspect Element -> "entry.XXXXXXX")
+GOOGLE_FORM_ENTRIES = {
+    "tanggal": "entry.",
+    "total": "entry.",
+    "moratel": "entry.",
+    "iforte": "entry.",
+    "telkom": "entry.",
+}
+
+# ============================================================
+# FORMAT WAKTU DI EXCEL
+# ============================================================
+# Format waktu yang dipakai di Excel kantor
+# PENTING: Excel kantor pakai TITIK bukan TITIK DUA!
 TIME_FORMAT_EXCEL = "%H.%M"       # "09.00", "16.00"
 DATE_FORMAT_EXCEL = "%d/%m/%Y"    # "02/01/2026"
 

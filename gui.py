@@ -245,7 +245,12 @@ class CactiAutoDataGUI:
         self.preview_frame = ttk.Frame(self.notebook, padding="10")
         self.notebook.add(self.preview_frame, text="👁️ Preview")
         self._create_preview_tab()
-    
+        
+        # Upload Form tab
+        self.upload_frame = ttk.Frame(self.notebook, padding="10")
+        self.notebook.add(self.upload_frame, text="📤 Upload Form")
+        self._create_upload_tab()
+
     def _create_main_tab(self):
         """Create main tab content"""
         # ===== HEADER =====
@@ -587,6 +592,278 @@ class CactiAutoDataGUI:
                 self.end_date_var.set(date_str)
                 
         CalendarDialog(self.root, on_date_selected, current)
+        
+    def _create_upload_tab(self):
+        """Create Upload to Google Form tab"""
+        # Form URL
+        url_frame = ttk.LabelFrame(self.upload_frame, text="🔗 Google Form URL", padding="10")
+        url_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.form_url_var = tk.StringVar(value=config.GOOGLE_FORM_URL)
+        ttk.Entry(url_frame, textvariable=self.form_url_var, width=80).pack(fill=tk.X)
+        
+        # Mapping Frame
+        map_frame = ttk.LabelFrame(self.upload_frame, text="📝 Mapping Entry ID", padding="10")
+        map_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(map_frame, text="Catatan: Tekan 'Auto Detect' untuk mengisi ID otomatis dari URL di atas.", 
+                  foreground="gray").grid(row=0, column=0, columnspan=3, pady=(0, 10), sticky="w")
+        
+        self.form_entries = {}
+        row = 1
+        for key, default_val in config.GOOGLE_FORM_ENTRIES.items():
+            ttk.Label(map_frame, text=key.capitalize()).grid(row=row, column=0, sticky="w", pady=2)
+            var = tk.StringVar(value=default_val)
+            self.form_entries[key] = var
+            ttk.Entry(map_frame, textvariable=var, width=30).grid(row=row, column=1, sticky="w", padx=10, pady=2)
+            row += 1
+            
+        ttk.Button(map_frame, text="🔍 Auto Detect IDs\n(via Internet)", command=self._auto_detect_form_ids).grid(row=1, column=2, rowspan=5, padx=10)
+        
+        # Action Frame
+        action_frame = ttk.Frame(self.upload_frame, padding="10")
+        action_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        # New Listbox Frame for Dates
+        date_frame = ttk.LabelFrame(action_frame, text="📅 Pilih Tanggal Upload", padding="10")
+        date_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        ttk.Label(date_frame, text="Pilih tanggal yang ingin di-upload (Tahan Ctrl untuk pilih banyak):", 
+                  font=("Segoe UI", 9)).pack(anchor=tk.W, pady=(0, 5))
+        
+        # Scrollable Listbox
+        list_scroll = ttk.Scrollbar(date_frame)
+        list_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.upload_dates_listbox = tk.Listbox(date_frame, selectmode=tk.MULTIPLE, height=12, yscrollcommand=list_scroll.set, font=("Consolas", 10))
+        self.upload_dates_listbox.pack(fill=tk.BOTH, expand=True)
+        list_scroll.config(command=self.upload_dates_listbox.yview)
+        
+        btn_frame = ttk.Frame(action_frame)
+        btn_frame.pack(fill=tk.X)
+        
+        ttk.Button(btn_frame, text="📂 Load Data dari Excel...", command=self._load_data_from_excel_files).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(btn_frame, text="▶️ Upload Tanggal Terpilih", command=self._run_upload_thread).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="Pilih Semua", command=lambda: self.upload_dates_listbox.selection_set(0, tk.END)).pack(side=tk.LEFT, padx=(10, 5))
+        ttk.Button(btn_frame, text="Batal Pilih Semua", command=lambda: self.upload_dates_listbox.selection_clear(0, tk.END)).pack(side=tk.LEFT)
+        
+        # Log frame
+        log_frame = ttk.LabelFrame(self.upload_frame, text="📋 Upload Log", padding="10")
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        
+        self.upload_log = tk.Text(log_frame, height=10, state=tk.DISABLED, bg="#f8f9fa")
+        self.upload_log.pack(fill=tk.BOTH, expand=True)
+
+    def _log_upload(self, msg: str):
+        """Menambah pesan ke log upload tab"""
+        self.upload_log.config(state=tk.NORMAL)
+        self.upload_log.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')} - {msg}\n")
+        self.upload_log.see(tk.END)
+        self.upload_log.config(state=tk.DISABLED)
+
+    def _auto_detect_form_ids(self):
+        url = self.form_url_var.get()
+        if not url or "docs.google.com/forms" not in url:
+            messagebox.showerror("Error", "URL Google Form tidak valid!")
+            return
+            
+        self._log_upload("Mencoba auto-detect entry IDs...")
+        
+        def task():
+            try:
+                import requests
+                import re
+                import json
+                resp = requests.get(url, timeout=10)
+                if resp.status_code == 200:
+                    html = resp.text
+                    # Cari struktur data FB_PUBLIC_LOAD_DATA_
+                    match = re.search(r'var FB_PUBLIC_LOAD_DATA_ = (\[.+?\]);\s*</script>', html, re.DOTALL)
+                    found_mapping = {}
+                    
+                    if match:
+                        data = json.loads(match.group(1))
+                        fields = data[1][1] if len(data) > 1 else []
+                        for f in fields:
+                            try:
+                                label = str(f[1]).lower()
+                                entry_id = f[4][0][0]
+                                
+                                # Heuristik pencocokan field
+                                target_key = None
+                                if "tanggal" in label: target_key = "tanggal"
+                                elif "total" in label: target_key = "total"
+                                elif "moratel" in label: target_key = "moratel"
+                                elif "iforte" in label: target_key = "iforte"
+                                elif "telkom" in label: target_key = "telkom"
+                                
+                                if target_key:
+                                    found_mapping[target_key] = f"entry.{entry_id}"
+                            except:
+                                pass
+                                
+                    if found_mapping:
+                        for k, v in found_mapping.items():
+                            if k in self.form_entries:
+                                self.root.after(0, lambda k=k, v=v: self.form_entries[k].set(v))
+                        self.root.after(0, lambda: self._log_upload(f"Berhasil mendeteksi {len(found_mapping)} input field."))
+                        self.root.after(0, lambda: messagebox.showinfo("Auto Detect", f"Berhasil memetakan {len(found_mapping)} field secara otomatis!"))
+                    else:
+                        # Fallback brute force
+                        entries = list(set(re.findall(r'entry\.(\d+)', html)))
+                        if entries:
+                            msg = "Gagal memetakan judul otomatis, namun menemukan entry ID berikut:\n\n"
+                            msg += "\n".join([f"entry.{e}" for e in entries])
+                            msg += "\n\nSilakan copy-paste manual dari Inspect Element (F12) jika ini tidak sesuai."
+                            self.root.after(0, lambda: messagebox.showwarning("Semi-Auto Detect", msg))
+                        else:
+                            self.root.after(0, lambda: messagebox.showerror("Gagal", "Tidak dapat menemukan ID form sama sekali."))
+                else:
+                    self.root.after(0, lambda: self._log_upload(f"Error HTTP {resp.status_code} saat fetch Google Form."))
+            except Exception as e:
+                self.root.after(0, lambda: self._log_upload(f"Error network: {e}"))
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Gagal fetch form: {e}"))
+                
+        import threading
+        threading.Thread(target=task, daemon=True).start()
+
+    def _update_upload_listbox(self):
+        """Update Listbox with unique dates from scraped data"""
+        if not hasattr(self, 'upload_dates_listbox'): return
+        
+        self.upload_dates_listbox.delete(0, tk.END)
+        if not hasattr(self, 'scraped_data') or not self.scraped_data: return
+        
+        # Get unique dates preserving order
+        seen = set()
+        unique_dates = []
+        for d in self.scraped_data:
+            date_str = d.get('date')
+            if date_str and date_str not in seen:
+                seen.add(date_str)
+                unique_dates.append(date_str)
+                
+        # Insert items and apply striped colors
+        for idx, date_str in enumerate(unique_dates):
+            self.upload_dates_listbox.insert(tk.END, f"  {date_str}  ")
+            # Alternating colors: light grey and white for higher contrast
+            bg_color = "#e8e8e8" if idx % 2 == 0 else "#ffffff"
+            self.upload_dates_listbox.itemconfig(idx, {'bg': bg_color})
+            
+        # Select all by default
+        self.upload_dates_listbox.selection_set(0, tk.END)
+
+    def _load_data_from_excel_files(self):
+        """Ask user for Excel files and load them into scraped_data format"""
+        file_paths = filedialog.askopenfilenames(
+            title="Pilih File Excel (Bisa pilih lebih dari satu)",
+            filetypes=[("Excel Files", "*.xlsx")]
+        )
+        
+        if not file_paths:
+            return
+            
+        import openpyxl
+        self._log_upload(f"Memproses {len(file_paths)} file Excel...")
+        
+        all_data = []
+        
+        for path in file_paths:
+            try:
+                wb = openpyxl.load_workbook(path, data_only=True)
+                for sheet_name in wb.sheetnames:
+                    # Skip metadata sheet
+                    if sheet_name == "Metadata":
+                        continue
+                        
+                    ws = wb[sheet_name]
+                    # Asumsi format excel dari tools ini (row 3 ke bawah ada data)
+                    for row_idx in range(3, ws.max_row + 1):
+                        date_val = ws.cell(row=row_idx, column=config.EXCEL_COL_TANGGAL).value
+                        time_val = ws.cell(row=row_idx, column=config.EXCEL_COL_WAKTU).value
+                        if not date_val: 
+                            continue # skip empty rows
+                            
+                        max_in = ws.cell(row=row_idx, column=config.EXCEL_COL_MAX_IN).value or "0"
+                        max_out = ws.cell(row=row_idx, column=config.EXCEL_COL_MAX_OUT).value or "0"
+                        
+                        # Handle datetime objects
+                        if isinstance(date_val, datetime):
+                            date_str = date_val.strftime(config.DATE_FORMAT_EXCEL)
+                        else:
+                            date_str = str(date_val)
+                            
+                        if isinstance(time_val, datetime):
+                            time_str = time_val.strftime(config.TIME_FORMAT_EXCEL)
+                        else:
+                            time_str = str(time_val).replace(':', '.') # normalize back
+                            
+                        # Build dict mapping expected by aggregator
+                        all_data.append({
+                            'sheet': sheet_name,
+                            'date': date_str,
+                            'time': time_str,
+                            'max_in': str(max_in),
+                            'max_out': str(max_out)
+                        })
+                        
+            except Exception as e:
+                self._log_upload(f"Error membaca '{os.path.basename(path)}': {str(e)}")
+                
+        if all_data:
+            self.scraped_data = all_data
+            self._update_upload_listbox()
+            self._log_upload(f"Berhasil me-load {len(all_data)} baris data dari Excel.")
+            messagebox.showinfo("Load Sukses", f"Berhasil memuat data dari {len(file_paths)} file Excel.\nSilakan pilih tanggal yang ingin diupload di daftar.")
+        else:
+            messagebox.showwarning("Load Gagal", "Tidak ada data bandwith valid yang ditemukan dari file yang dipilih.")
+
+    def _run_upload_thread(self):
+        if not hasattr(self, 'scraped_data') or not self.scraped_data:
+            messagebox.showerror("Error", "Belum ada data! Lakukan proses scraping (Klik START) terlebih dahulu di tab Main sebelum upload.")
+            return
+            
+        selected_indices = self.upload_dates_listbox.curselection()
+        if not selected_indices:
+            messagebox.showwarning("Peringatan", "Pilih minimal satu tanggal dari daftar sebelum upload!")
+            return
+            
+        # Strip the padding spaces added for UI
+        selected_dates = [self.upload_dates_listbox.get(i).strip() for i in selected_indices]
+            
+        import threading
+        threading.Thread(target=self._upload_task, args=(selected_dates,), daemon=True).start()
+        
+    def _upload_task(self, selected_dates):
+        is_dry_run = self.dry_run_var.get()
+        mode_str = " (TEST MODE / DRY RUN)" if is_dry_run else ""
+        self.root.after(0, lambda: self._log_upload(f"========= MULAI UPLOAD ({len(selected_dates)} TANGGAL){mode_str} ========="))
+        
+        from form_submitter import GoogleFormSubmitter
+        url = self.form_url_var.get()
+        mapping = {k: v.get() for k, v in self.form_entries.items()}
+        
+        submitter = GoogleFormSubmitter(url, mapping)
+        self.root.after(0, lambda: self._log_upload("Menghitung agregasi harian..."))
+        
+        try:
+            # Filter data by selected dates
+            filtered_data = [d for d in self.scraped_data if d.get('date') in selected_dates]
+            
+            results = submitter.submit_all(filtered_data, dry_run=is_dry_run)
+            success_count = 0
+            
+            for date_str, success, msg in results:
+                status_icon = "✅" if success else "❌"
+                log_msg = f"{status_icon} Tanggal {date_str}: {msg}"
+                self.root.after(0, lambda m=log_msg: self._log_upload(m))
+                if success: success_count += 1
+                
+            self.root.after(0, lambda: self._log_upload(f"Selesai! {success_count} / {len(results)} tanggal berhasil diupload."))
+            self.root.after(0, lambda: messagebox.showinfo("Upload Selesai", f"Berhasil mengunggah {success_count} baris data harian ke form."))
+        except Exception as e:
+            self.root.after(0, lambda: self._log_upload(f"⚠️ Terjadi error fatal: {str(e)}"))
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Terjadi error saat upload: {str(e)}"))
     
     def _update_all_texts(self):
         """Update all UI text to current language"""
@@ -795,6 +1072,10 @@ class CactiAutoDataGUI:
                     )
             
             self.scraped_data = data
+            
+            # Populate upload listbox
+            if hasattr(self, 'upload_dates_listbox'):
+                self.root.after(0, self._update_upload_listbox)
             
             if not data:
                 self._update_progress(get_text("status_no_data", lang))

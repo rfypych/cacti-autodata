@@ -54,6 +54,21 @@ EXCEL_COL_AVG_IN = 7    # Kolom G: Average (IN)
 EXCEL_COL_AVG_OUT = 8   # Kolom H: Average (Out)
 
 # ============================================================
+# KONFIGURASI GOOGLE FORM (UPLOAD OTOMATIS)
+# ============================================================
+# URL Google Form (pastikan URL yang berakhiran /viewform)
+GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSeFoeV-XLURb6RfIL20LrUCldthoaeAp0HDLFF5P5TEZlpHKA/viewform"
+
+# Mapping ID Isian Form (dapatkan via Inspect Element -> "entry.XXXXXXX")
+GOOGLE_FORM_ENTRIES = {
+    "tanggal": "entry.",
+    "total": "entry.",
+    "moratel": "entry.",
+    "iforte": "entry.",
+    "telkom": "entry.",
+}
+
+# ============================================================
 # FORMAT WAKTU DI EXCEL
 # ============================================================
 # Format waktu yang dipakai di Excel kantor
