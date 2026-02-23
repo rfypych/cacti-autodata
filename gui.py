@@ -1512,84 +1512,51 @@ class CactiAutoDataGUI:
         help_window.transient(self.root)
         help_window.grab_set()
         
-        # Main container with scrollbar
-        main_container = ttk.Frame(help_window)
+        # Main container with padding
+        main_container = ttk.Frame(help_window, padding="15")
         main_container.pack(fill=tk.BOTH, expand=True)
-        
-        # Canvas and scrollbar for scrolling
-        canvas = tk.Canvas(main_container, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas, padding="20")
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Enable mouse wheel scrolling
-        def on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        canvas.bind_all("<MouseWheel>", on_mousewheel)
-        
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         # ===== HEADER =====
         ttk.Label(
-            scrollable_frame,
+            main_container,
             text="🌵 Cacti AutoData Help",
             font=("Segoe UI", 16, "bold")
         ).pack(anchor=tk.W, pady=(0, 15))
         
-        # ===== BASIC STEPS =====
-        basic_frame = ttk.LabelFrame(scrollable_frame, text=get_text("help_basic_title", lang), padding="10")
-        basic_frame.pack(fill=tk.X, pady=(0, 10))
+        # ===== NOTEBOOK FOR TABS =====
+        notebook = ttk.Notebook(main_container)
+        notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
-        # ===== CONTENT =====
-        help_text = """
-1. **Pilih Tanggal**: Tentukan rentang tanggal data yang ingin diambil.
-2. **Pilih URL**: Pastikan URL Cacti sudah benar (default biasanya sudah oke).
-3. **Setting Sheet**: Masuk ke tab 'Settings', pastikan setiap Interface sudah dipetakan ke nama Sheet Excel yang sesuai.
-4. **Mulai**: Klik tombol 'Start Scraping'.
-5. **Login**: Jendela browser akan muncul. Silakan login ke Cacti secara manual.
-6. **Tunggu**: Setelah login, biarkan aplikasi bekerja sendiri. Jangan tutup browsernya!
-7. **Selesai**: File Excel akan otomatis tersimpan di folder 'results'.
-
-FITUR-FITUR:
-----------------
-• **Auto-Resume**: Jika koneksi putus, aplikasi akan mencoba lanjut dari titik terakhir.
-• **Demo Mode**: Gunakan untuk latihan/testing tanpa koneksi Cacti.
-• **Tabbed Preview**: Lihat data per sheet sebelum disimpan.
-• **Save Log**: Simpan riwayat eksekusi untuk laporan atau troubleshooting.
-• **Excel Metadata**: File output memiliki sheet 'Metadata' berisi info eksekusi.
-
-TROUBLESHOOTING:
-----------------
-Q: Browser tidak muncul?
-A: Pastikan Chrome sudah terinstall. Coba mode 'Show Browser' di settings.
-
-Q: Data di Excel kosong/salah?
-A: Cek tab 'Settings', pastikan mapping Interface ke Sheet sudah benar.
-
-Q: Error "Element not found"?
-A: Mungkin internet lambat atau struktur web Cacti berubah. Coba lagi dengan koneksi stabil.
-
-Q: Tombol Start tidak bisa diklik?
-A: Pastikan tanggal sudah diisi dengan format DD/MM/YYYY.
-
-TIPS:
-----------------
-- Gunakan fitur 'Demo Mode' untuk melihat bagaimana hasil akhir Excel akan terlihat.
-- Selalu cek 'Preview' sebelum file benar-benar disimpan jika Anda ragu.
-"""
+        help_tabs_data = get_text("help_tabs", lang)
         
-        text_widget = tk.Text(scrollable_frame, wrap=tk.WORD, font=("Segoe UI", 10), bg="#f0f0f0", relief=tk.FLAT, height=25)
-        text_widget.insert(tk.END, help_text)
-        text_widget.configure(state=tk.DISABLED)
-        text_widget.pack(fill=tk.BOTH, expand=True)
+        # Generate tabs dynamically if the dictionary exists
+        if isinstance(help_tabs_data, dict):
+            for tab_name, tab_content in help_tabs_data.items():
+                tab_frame = ttk.Frame(notebook)
+                notebook.add(tab_frame, text=f" {tab_name} ")
+                
+                text_scroll = ttk.Scrollbar(tab_frame)
+                text_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+                
+                text_widget = tk.Text(
+                    tab_frame, 
+                    wrap=tk.WORD, 
+                    font=("Segoe UI", 10), 
+                    bg="#fafafa", 
+                    relief=tk.FLAT, 
+                    height=18,
+                    yscrollcommand=text_scroll.set,
+                    padx=15,
+                    pady=15
+                )
+                text_widget.insert(tk.END, tab_content)
+                text_widget.configure(state=tk.DISABLED)
+                text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                
+                text_scroll.config(command=text_widget.yview)
+        
+        # Creator Frame (Footer)
+        scrollable_frame = main_container # Alias for compatibility with footer pack
         # Creator Frame (Footer)
         ttk.Separator(scrollable_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(20, 10))
         
