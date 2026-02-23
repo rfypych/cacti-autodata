@@ -43,8 +43,34 @@ class CactiScraper:
         self.driver = None
         self.progress_callback = progress_callback or (lambda msg, pct: None)
         self.attached_to_existing = False
-        # Load Indonesian holidays
+        # Load fallback Indonesian holidays
         self.id_holidays = holidays.country_holidays('ID')
+        # Cache for API holidays per year
+        self._api_holidays = {}
+
+    def _get_api_holidays(self, year: int) -> dict:
+        """Get holidays from API with fallback to local library"""
+        if year in self._api_holidays:
+            return self._api_holidays[year]
+            
+        api_results = {}
+        try:
+            import requests
+            response = requests.get(f"https://libur.deno.dev/api?year={year}", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                for item in data:
+                    # Convert YYYY-MM-DD string to datetime.date
+                    day_obj = datetime.strptime(item["date"], "%Y-%m-%d").date()
+                    api_results[day_obj] = item["name"]
+                
+                self._api_holidays[year] = api_results
+                return api_results
+        except Exception as e:
+            self._update_progress(f"⚠️ Peringatan: Gagal mengambil data libur online (menggunakan data offline lokal). Error: {str(e)}", -1)
+            
+        self._api_holidays[year] = self.id_holidays
+        return self.id_holidays
     
     def _update_progress(self, message: str, percentage: int = -1):
         """Update progress via callback"""
@@ -63,11 +89,16 @@ class CactiScraper:
                 continue
                 
             # Skip holidays if configured
-            if config.SKIP_HOLIDAYS and current.date() in self.id_holidays:
-                holiday_name = self.id_holidays.get(current.date())
-                self._update_progress(f"🏖️ Skip Libur Nasional: {current.strftime('%d/%m/%Y')} ({holiday_name})", -1)
-                current += timedelta(days=1)
-                continue
+            if config.SKIP_HOLIDAYS:
+                holidays_dict = self._get_api_holidays(current.year)
+                if current.date() in holidays_dict:
+                    holiday_name = holidays_dict.get(current.date())
+                    # Use standard property access or dict get if it falls back to holidays.country_holidays
+                    if hasattr(holiday_name, 'get'):
+                        holiday_name = holidays_dict.get(current.date())
+                    self._update_progress(f"🏖️ Skip Libur Nasional: {current.strftime('%d/%m/%Y')} ({holiday_name})", -1)
+                    current += timedelta(days=1)
+                    continue
                 
             for time_slot in config.TIME_SLOTS:
                 hour, minute = time_slot
@@ -709,16 +740,19 @@ class CactiScraper:
                 continue
                 
             # Skip holiday if configured
-            if config.SKIP_HOLIDAYS and current_date.date() in self.id_holidays:
-                holiday_name = self.id_holidays.get(current_date.date())
-                # Update progress for skipped days
-                skipped_iterations = len(config.TIME_SLOTS) * len(config.GRAPH_IDS)
-                current_iteration += skipped_iterations
-                
-                self._update_progress(f"🎆 {current_date.strftime('%d/%m/%Y')} Libur Nasional: {holiday_name} (Skip)", -1)
-                
-                current_date += timedelta(days=1)
-                continue
+            if config.SKIP_HOLIDAYS:
+                holidays_dict = self._get_api_holidays(current_date.year)
+                if current_date.date() in holidays_dict:
+                    holiday_name = holidays_dict.get(current_date.date())
+                    
+                    # Update progress for skipped days
+                    skipped_iterations = len(config.TIME_SLOTS) * len(config.GRAPH_IDS)
+                    current_iteration += skipped_iterations
+                    
+                    self._update_progress(f"🎆 {current_date.strftime('%d/%m/%Y')} Libur Nasional: {holiday_name} (Skip)", -1)
+                    
+                    current_date += timedelta(days=1)
+                    continue
 
             for hour, minute in config.TIME_SLOTS:
                 time_str = f"{hour:02d}:{minute:02d}"
@@ -795,13 +829,15 @@ class CactiScraper:
                 continue
                 
             # Skip holidays if configured
-            if config.SKIP_HOLIDAYS and current_date.date() in self.id_holidays:
-                holiday_name = self.id_holidays.get(current_date.date())
-                # Increment iteration theoretically to keep progress bar moving
-                current_iteration += len(config.GRAPH_IDS) * len(config.TIME_SLOTS)
-                self._update_progress(f"🎆 {date_str} Libur Nasional: {holiday_name} (Dilewati)", -1)
-                current_date += timedelta(days=1)
-                continue
+            if config.SKIP_HOLIDAYS:
+                holidays_dict = self._get_api_holidays(current_date.year)
+                if current_date.date() in holidays_dict:
+                    holiday_name = holidays_dict.get(current_date.date())
+                    # Increment iteration theoretically to keep progress bar moving
+                    current_iteration += len(config.GRAPH_IDS) * len(config.TIME_SLOTS)
+                    self._update_progress(f"🎆 {date_str} Libur Nasional: {holiday_name} (Dilewati)", -1)
+                    current_date += timedelta(days=1)
+                    continue
                 
             # Full 24-hour range
             from_dt = current_date.replace(hour=0, minute=0, second=0)
