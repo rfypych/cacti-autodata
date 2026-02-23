@@ -937,11 +937,10 @@ class CactiAutoDataGUI:
                 
             filtered_data = [d for d in self.form_scraped_data if d.get('date') in checked_dates]
             
-            results = submitter.submit_all(filtered_data, dry_run=is_dry_run)
             success_count = 0
             
-            # Update treeview and log
-            for date_str, success, msg in results:
+            def on_progress(date_str, success, msg):
+                nonlocal success_count
                 status_icon = "✅" if success else "❌"
                 log_msg = f"{status_icon} Tanggal {date_str}: {msg}"
                 self.root.after(0, lambda m=log_msg: self._log_upload(m))
@@ -950,6 +949,8 @@ class CactiAutoDataGUI:
                 # Update treeview status col
                 self.root.after(0, lambda d=date_str, m=msg: self._update_treeview_status(d, m))
                 
+            results = submitter.submit_all(filtered_data, dry_run=is_dry_run, progress_callback=on_progress)
+            
             self.root.after(0, lambda: self._log_upload(f"Selesai! {success_count} / {len(results)} tanggal berhasil diupload."))
             if success_count > 0 and not is_dry_run:
                 self.root.after(0, lambda: messagebox.showinfo("Upload Selesai", f"Berhasil mengunggah {success_count} baris data harian ke form."))

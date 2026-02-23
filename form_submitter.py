@@ -127,7 +127,7 @@ class GoogleFormSubmitter:
         except Exception as e:
             return False, str(e)
             
-    def submit_all(self, scraped_data: List[Dict], dry_run: bool = False) -> List[Tuple[str, bool, str]]:
+    def submit_all(self, scraped_data: List[Dict], dry_run: bool = False, progress_callback=None) -> List[Tuple[str, bool, str]]:
         """Submit seluruh data yang telah diagregasi. Return [(Tanggal, boolean_status, pesan)]"""
         daily_stats = self.aggregate_daily_data(scraped_data)
         results = []
@@ -149,5 +149,7 @@ class GoogleFormSubmitter:
                     
             success, msg = self.submit_single_date(date_str, moratel_val, iforte_val, telkom_val, dry_run=dry_run)
             results.append((date_str, success, msg))
+            if progress_callback:
+                progress_callback(date_str, success, msg)
             
         return results
