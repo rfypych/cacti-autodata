@@ -24,15 +24,23 @@ def parse_bandwidth_to_mbps(bw_str: str) -> float:
         return val
 
 def format_mbps(val: float) -> str:
-    """Format float Mbps kembali ke string yang mudah dibaca (ex: 4900 -> 4.9 G)"""
+    """Format float Mbps kembali ke string yang mudah dibaca (ex: 4900 -> 4.9 G, 0.25 -> 250 K)"""
+    if val == 0:
+        return "0"
+        
     if val >= 1000:
-        if val % 1000 == 0:
-            return f"{int(val/1000)} G"
-        return f"{val/1000:.2f} G".rstrip('0').rstrip('.')
+        formatted = f"{val/1000:.2f}"
+        unit = "G"
+    elif val >= 1:
+        formatted = f"{val:.2f}"
+        unit = "M"
     else:
-        if val % 1 == 0:
-            return f"{int(val)} M"
-        return f"{val:.2f} M".rstrip('0').rstrip('.')
+        formatted = f"{val*1000:.2f}"
+        unit = "K"
+        
+    # Hapus desimal .00 jika pas, tapi biarkan .50 menjadi .5
+    formatted = formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
+    return f"{formatted} {unit}"
 
 class GoogleFormSubmitter:
     def __init__(self, form_url: str, entry_mapping: dict):
