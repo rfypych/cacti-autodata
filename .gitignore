@@ -105,3 +105,4 @@ test_*.py
 cacti_debug/
 
 
+"!templates/*.html" 
