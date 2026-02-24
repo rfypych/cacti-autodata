@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Cacti AutoData Web Dashboard - Modern interface for automated bandwidth data collection">
+    <title>🌵 Cacti AutoData Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <!-- Mobile Header (hidden on desktop) -->
+    <header class="mobile-header" id="mobileHeader">
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" aria-label="Open menu">
+            <span></span><span></span><span></span>
+        </button>
+        <span class="mobile-brand">🌵 Cacti AutoData</span>
+        <button class="theme-toggle-btn" id="mobileThemeBtn" onclick="toggleTheme()"
+            style="width:auto; margin-left:auto; padding:6px 10px;">
+            <span class="theme-icon" id="mobileThemeIcon">☀️</span>
+        </button>
+    </header>
+
+    <!-- Sidebar Overlay (mobile tap-to-close) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <div class="app-layout">
+        <!-- ========== SIDEBAR ========== -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="logo-icon">🌵</div>
+                    <div class="logo-text">
+                        <span class="brand">Cacti AutoData</span>
+                        <span class="tagline">Web Dashboard v3.0</span>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-page="main" onclick="switchPage('main')">
+                    <span class="nav-icon">🏠</span>
+                    <span class="nav-label">Dashboard</span>
+                </button>
+                <button class="nav-item" data-page="settings" onclick="switchPage('settings')">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-label">Settings</span>
+                </button>
+                <button class="nav-item" data-page="preview" onclick="switchPage('preview')">
+                    <span class="nav-icon">👁️</span>
+                    <span class="nav-label">Preview Data</span>
+                </button>
+                <button class="nav-item" data-page="upload" onclick="switchPage('upload')">
+                    <span class="nav-icon">📤</span>
+                    <span class="nav-label">Upload Form</span>
+                </button>
+                <button class="nav-item" data-page="help" onclick="switchPage('help')">
+                    <span class="nav-icon">❓</span>
+                    <span class="nav-label">Help</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()">
+                    <span class="theme-icon" id="themeIcon">☀️</span>
+                    <span id="themeLabel">Light Mode</span>
+                </button>
+                <div class="session-status" id="sessionStatusArea">
+                    <span class="status-dot" id="sessionDot"></span>
+                    <span id="sessionText">Checking...</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ========== MAIN CONTENT ========== -->
+        <main class="main-content">
+
+            <!-- ==================== PAGE: MAIN ==================== -->
+            <section id="page-main" class="page-section active">
+                <div class="page-header">
+                    <h1>🏠 Dashboard</h1>
+                    <p>Kontrol utama scraping bandwidth Cacti ke Excel</p>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <span class="stat-label">Status</span>
+                        <span class="stat-value" id="statStatus" style="font-size:1rem;">Idle</span>
+                        <span class="stat-detail" id="statStatusDetail">Menunggu perintah...</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Data Diambil</span>
+                        <span class="stat-value" id="statCount">0</span>
+                        <span class="stat-detail">records</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Interfaces</span>
+                        <span class="stat-value" id="statInterfaces">-</span>
+                        <span class="stat-detail">aktif</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Time Slots</span>
+                        <span class="stat-value" id="statSlots">-</span>
+                        <span class="stat-detail">per hari</span>
+                    </div>
+                </div>
+
+                <!-- Input Section -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">📅</span> Input Data
+                        </div>
+                        <span class="help-tip"
+                            title="Tentukan rentang tanggal untuk mengambil data bandwidth dari Cacti. Biarkan file Excel kosong untuk auto-generate nama file.">ℹ️</span>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="startDate">Tanggal Mulai</label>
+                            <input type="date" id="startDate">
+                        </div>
+                        <div class="form-group">
+                            <label for="endDate">Tanggal Akhir</label>
+                            <input type="date" id="endDate">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="excelPath">File Excel Output <span class="text-muted">(opsional — kosongkan untuk
+                                auto-generate)</span></label>
+                        <input type="text" id="excelPath"
+                            placeholder="Contoh: result/Cacti_Data_20260201_20260228.xlsx">
+                        <small class="text-muted mt-2" id="autoPathHint" style="display:none;">📁 File akan disimpan
+                            otomatis ke folder <code>result/</code></small>
+                    </div>
+                </div>
+
+                <!-- Sheet Selection -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">📑</span> Sheet Selection
+                        </div>
+                        <span class="help-tip"
+                            title="Pilih interface/ISP mana yang ingin di-scrape. Setiap sheet merepresentasikan satu interface Cacti (misal: iForte, Telkom, Moratel).">ℹ️</span>
+                    </div>
+                    <div class="sheet-selector" id="sheetSelector">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Options -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">🔧</span> Options
+                        </div>
+                    </div>
+                    <div class="toggle-group">
+                        <label class="toggle-item"
+                            title="Melewati baris/tanggal yang sudah terisi di file Excel. Mencegah overwrite data yang sudah ada.">
+                            <input type="checkbox" id="optSkipFilled" checked>
+                            <span class="toggle-switch"></span>
+                            Skip baris terisi
+                        </label>
+                        <label class="toggle-item" title="Data hari Sabtu dan Minggu tidak akan diambil dari Cacti.">
+                            <input type="checkbox" id="optSkipWeekends" checked>
+                            <span class="toggle-switch"></span>
+                            🏖️ Skip weekend
+                        </label>
+                        <label class="toggle-item"
+                            title="Melewati tanggal merah dan hari libur nasional Indonesia. Terhubung ke kalender online.">
+                            <input type="checkbox" id="optSkipHolidays">
+                            <span class="toggle-switch"></span>
+                            🎆 Skip hari libur
+                        </label>
+                        <label class="toggle-item"
+                            title="Include sheet Metadata (info tambahan: waktu generate, sumber URL, dll) di file Excel output.">
+                            <input type="checkbox" id="optMetadata" checked>
+                            <span class="toggle-switch"></span>
+                            📋 Include Metadata
+                        </label>
+                        <label class="toggle-item"
+                            title="Simulasi proses: data diambil dari Cacti namun TIDAK ditulis ke Excel. Aman untuk testing.">
+                            <input type="checkbox" id="optDryRun">
+                            <span class="toggle-switch"></span>
+                            🧪 Dry Run
+                        </label>
+                        <label class="toggle-item"
+                            title="Gunakan data dummy (tidak perlu koneksi ke Cacti). Cocok untuk demo dan testing tampilan.">
+                            <input type="checkbox" id="optDemoMode">
+                            <span class="toggle-switch"></span>
+                            🎮 Demo Mode
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="btn-group mb-4">
+                    <button class="btn btn-primary btn-lg" id="btnStart" onclick="startScraping()">
+                        🚀 Mulai Rekap
+                    </button>
+                    <button class="btn btn-danger" id="btnStop" onclick="stopScraping()" disabled>
+                        ⏹️ Berhenti
+                    </button>
+                </div>
+
+                <!-- Progress -->
+                <div class="card" id="progressCard">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">📊</span> Progress & Log
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-secondary" id="progressPercent" style="font-size:0.85rem;">0%</span>
+                            <button class="btn btn-sm btn-secondary" onclick="downloadLog()"
+                                title="Download log sebagai file .txt">💾 Save Log</button>
+                        </div>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar-fill" id="progressBar"></div>
+                        </div>
+                        <div class="progress-info">
+                            <span id="progressStatus">Menunggu...</span>
+                        </div>
+                    </div>
+                    <div class="log-viewer" id="logViewer">
+                        <div class="log-entry text-muted">Siap menerima perintah...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== PAGE: SETTINGS ==================== -->
+            <section id="page-settings" class="page-section">
+                <div class="page-header">
+                    <h1>⚙️ Settings</h1>
+                    <p>Konfigurasi URL Cacti, cookie, mapping interface, dan format output</p>
+                </div>
+
+                <div class="settings-grid">
+                    <!-- Cookie / Session -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="card-icon">🔑</span> Session Cookie
+                            </div>
+                            <button class="btn btn-sm btn-secondary" onclick="openModal('cookieModal')">❓ Cara
+                                ambil</button>
+                        </div>
+                        <div class="info-box mb-4">
+                            <strong>⚡ Kenapa perlu cookie?</strong><br>
+                            Aplikasi ini menggunakan sesi login browser Anda untuk mengakses data Cacti. Paste cookie
+                            dari browser agar scraper bisa mengambil data tanpa login ulang.
+                        </div>
+                        <div class="form-group">
+                            <label for="cookieName">Cookie Name</label>
+                            <select id="cookieName">
+                                <option value="Cacti">Cacti</option>
+                                <option value="PHPSESSID">PHPSESSID</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="cookieValue">Cookie Value</label>
+                            <input type="text" id="cookieValue" placeholder="Paste cookie value dari DevTools (F12)...">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button class="btn btn-primary" onclick="saveCookie()">
+                                💾 Simpan Cookie
+                            </button>
+                            <span class="text-muted" id="cookieAge" style="font-size:0.8rem;"></span>
+                        </div>
+                    </div>
+
+                    <!-- Cacti URL -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="card-icon">🌐</span> Server Cacti
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="settingUrl">URL Cacti <span class="help-tip"
+                                    title="URL halaman Cacti yang menampilkan graph bandwidth. Biasanya berakhiran graph_view.php?action=tree&node=...">ℹ️</span></label>
+                            <input type="url" id="settingUrl" placeholder="https://monitor.example.id/cacti/...">
+                        </div>
+                        <div class="form-group">
+                            <label>Format Waktu di Excel <span class="help-tip"
+                                    title="Sesuaikan dengan format yang digunakan di komputer/Excel kantor Anda. Biasanya kantor Indonesia pakai titik (09.00).">ℹ️</span></label>
+                            <div class="radio-group">
+                                <label class="radio-item">
+                                    <input type="radio" name="timeFormat" value="dot" id="timeDot" checked>
+                                    <span class="radio-label">Titik (09.00, 16.00)</span>
+                                </label>
+                                <label class="radio-item">
+                                    <input type="radio" name="timeFormat" value="colon" id="timeColon">
+                                    <span class="radio-label">Titik Dua (09:00, 16:00)</span>
+                                </label>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary mt-2" onclick="saveSettings()">
+                            💾 Simpan Settings
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Interface Mapping -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">🗺️</span> Interface → Sheet Mapping
+                        </div>
+                        <span class="help-tip"
+                            title="Mapping antara nama interface di Cacti dan nama sheet di Excel. Edit nama sheet jika template Excel Anda menggunakan penamaan berbeda.">ℹ️</span>
+                    </div>
+                    <div class="info-box mb-4">
+                        Setiap interface Cacti dipetakan ke nama sheet Excel. Anda bisa mengedit nama sheet jika
+                        template Excel berbeda. Klik <strong>Simpan Mapping</strong> setelah mengubah.
+                    </div>
+                    <div id="mappingContainer">
+                        <!-- Populated by JS -->
+                    </div>
+                    <button class="btn btn-primary mt-4" onclick="saveMapping()">💾 Simpan Mapping</button>
+                </div>
+
+                <!-- Data & Output Rules -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">📊</span> Data & Output Rules
+                        </div>
+                    </div>
+                    <div class="toggle-group flex-col">
+                        <label class="toggle-item" title="Data hari Sabtu dan Minggu tidak akan diambil.">
+                            <input type="checkbox" id="setSkipWeekends" checked>
+                            <span class="toggle-switch"></span>
+                            🏖️ Skip Weekend (Sabtu & Minggu)
+                        </label>
+                        <label class="toggle-item"
+                            title="Lewati tanggal merah dan hari libur nasional Indonesia secara otomatis.">
+                            <input type="checkbox" id="setSkipHolidays">
+                            <span class="toggle-switch"></span>
+                            🎆 Skip Hari Libur Nasional
+                        </label>
+                        <label class="toggle-item"
+                            title="Tambahkan sheet Metadata di file Excel berisi info waktu generate, sumber URL, dan konfigurasi.">
+                            <input type="checkbox" id="setMetadata" checked>
+                            <span class="toggle-switch"></span>
+                            📋 Include Metadata Sheet
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Danger Zone -->
+                <div class="card danger-card">
+                    <div class="card-header">
+                        <div class="card-title text-danger">
+                            <span class="card-icon">⚠️</span> Danger Zone
+                        </div>
+                    </div>
+                    <p class="text-muted mb-4" style="font-size:0.85rem;">Reset semua pengaturan ke nilai default.
+                        Tindakan ini tidak bisa dibatalkan.</p>
+                    <button class="btn btn-danger" onclick="resetSettings()">
+                        🔄 Reset All Settings
+                    </button>
+                </div>
+            </section>
+
+            <!-- ==================== PAGE: PREVIEW ==================== -->
+            <section id="page-preview" class="page-section">
+                <div class="page-header">
+                    <h1>👁️ Preview Data</h1>
+                    <p>Lihat dan verifikasi data hasil scraping sebelum ditulis ke Excel</p>
+                </div>
+
+                <div class="info-box mb-4">
+                    💡 <strong>Cara pakai:</strong> Setelah scraping selesai di Dashboard, data akan muncul di sini
+                    dikelompokkan per sheet/ISP.
+                    Periksa nilainya, lalu klik <strong>"Tulis ke Excel"</strong> untuk menyimpan. File tersimpan di
+                    folder <code>result/</code>.
+                </div>
+
+                <!-- Preview Controls -->
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" onclick="refreshPreview()">
+                            🔄 Refresh
+                        </button>
+                        <button class="btn btn-success" id="btnWriteExcel" onclick="writeToExcel()" disabled>
+                            💾 Tulis ke Excel
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="clearPreview()">
+                            🗑️ Clear
+                        </button>
+                    </div>
+                    <span class="text-secondary" id="previewCount">Belum ada data</span>
+                </div>
+
+                <!-- Sheet Tabs -->
+                <div class="tab-nav" id="previewTabNav">
+                    <!-- Populated by JS -->
+                </div>
+
+                <!-- Data Tables -->
+                <div id="previewTabContent">
+                    <div class="empty-state">
+                        <div class="empty-icon">📋</div>
+                        <p>Belum ada data. Jalankan scraping di Dashboard → data akan otomatis tampil di sini.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== PAGE: UPLOAD FORM ==================== -->
+            <section id="page-upload" class="page-section">
+                <div class="page-header">
+                    <h1>📤 Upload ke Google Form</h1>
+                    <p>Kirim data kapasitas harian (Max Out 24-Jam) langsung ke Google Form</p>
+                </div>
+
+                <div class="info-box mb-4">
+                    ⚡ <strong>Perbedaan dengan mode Excel:</strong> Fitur ini independen dari Excel!
+                    Ia akan mendownload data CSV selama <strong>00:00 hingga 23:59</strong> untuk menemukan puncak
+                    kecepatan absolut dalam 24 jam penuh,
+                    lalu menguploadnya otomatis ke Google Form.
+                </div>
+
+                <!-- Google Form URL -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">🔗</span> Google Form URL
+                        </div>
+                        <span class="help-tip"
+                            title="Masukkan URL Google Form yang akan menerima data. Pastikan form sudah di-set 'akses publik' (bukan organisasi internal).">ℹ️</span>
+                    </div>
+                    <div class="form-group">
+                        <input type="url" id="formUrl" placeholder="https://docs.google.com/forms/d/e/1FAI.../viewform">
+                    </div>
+                </div>
+
+                <!-- Entry ID Mapping -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">📝</span> Mapping Entry ID
+                        </div>
+                        <button class="btn btn-sm btn-primary" onclick="autoDetectFormIds()" id="btnAutoDetect">
+                            🔍 Auto Detect IDs
+                        </button>
+                    </div>
+                    <div class="info-box mb-4">
+                        💡 Klik <strong>"Auto Detect IDs"</strong> untuk mengisi ID otomatis dari URL di atas.
+                        Atau isi manual dari Inspect Element (F12) pada halaman Google Form.
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Tanggal</label>
+                            <input type="text" id="entryTanggal" placeholder="entry.123456789">
+                        </div>
+                        <div class="form-group">
+                            <label>Total</label>
+                            <input type="text" id="entryTotal" placeholder="entry.123456789">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Moratel</label>
+                            <input type="text" id="entryMoratel" placeholder="entry.123456789">
+                        </div>
+                        <div class="form-group">
+                            <label>iForte</label>
+                            <input type="text" id="entryIforte" placeholder="entry.123456789">
+                        </div>
+                        <div class="form-group">
+                            <label>Telkom</label>
+                            <input type="text" id="entryTelkom" placeholder="entry.123456789">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scrape 24h Data -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">📅</span> Tarik Data 24-Jam (Peak)
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="formStartDate">Mulai</label>
+                            <input type="date" id="formStartDate">
+                        </div>
+                        <div class="form-group">
+                            <label for="formEndDate">Sampai</label>
+                            <input type="date" id="formEndDate">
+                        </div>
+                        <div class="form-group" style="flex:none;">
+                            <label>&nbsp;</label>
+                            <button class="btn btn-primary" onclick="scrapeFormPeak()" id="btnFormScrape">
+                                🔍 Tarik Data & Preview
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Preview Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">👁️</span> Preview Agregasi Harian
+                        </div>
+                        <span class="help-tip"
+                            title="Klik checkbox untuk memilih/melewati hari tertentu sebelum upload. Nilai yang ditampilkan adalah MAX bandwidth (peak) dalam 24 jam.">ℹ️</span>
+                    </div>
+                    <div class="data-table-wrapper">
+                        <table class="data-table" id="formPreviewTable">
+                            <thead>
+                                <tr>
+                                    <th style="width:60px;">Upload?</th>
+                                    <th>Tanggal</th>
+                                    <th>Total Kapasitas</th>
+                                    <th>Moratel</th>
+                                    <th>iForte</th>
+                                    <th>Telkom</th>
+                                </tr>
+                            </thead>
+                            <tbody id="formPreviewBody">
+                                <tr>
+                                    <td colspan="6" class="text-muted" style="text-align:center; padding:24px;">
+                                        Klik "Tarik Data & Preview" untuk mengambil data 24-jam
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Upload Actions -->
+                <div class="flex items-center gap-2 mb-4">
+                    <button class="btn btn-success btn-lg" id="btnFormUpload" onclick="uploadToForm()" disabled>
+                        ▶️ Upload ke Google Form
+                    </button>
+                    <label class="toggle-item" title="Simulasi upload tanpa benar-benar mengirim ke Google Form.">
+                        <input type="checkbox" id="formDryRun">
+                        <span class="toggle-switch"></span>
+                        🧪 Test Mode
+                    </label>
+                </div>
+
+                <!-- Upload Log -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">📋</span> Upload Log
+                        </div>
+                    </div>
+                    <div class="log-viewer" id="formLogViewer" style="max-height:200px;">
+                        <div class="log-entry text-muted">Menunggu aksi...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== PAGE: HELP ==================== -->
+            <section id="page-help" class="page-section">
+                <div class="page-header">
+                    <h1>❓ Bantuan Lengkap</h1>
+                    <p>Panduan penggunaan Cacti AutoData Web Dashboard</p>
+                </div>
+
+                <!-- Accordion: Pengenalan -->
+                <div class="card accordion-card">
+                    <button class="accordion-header" onclick="toggleAccordion(this)">
+                        <span><span class="card-icon">🌵</span> Pengenalan</span>
+                        <span class="accordion-arrow">▼</span>
+                    </button>
+                    <div class="accordion-body open">
+                        <p>Selamat datang di <strong>Cacti AutoData</strong>! 🌵</p>
+                        <p>Aplikasi ini mengotomatisasi perekaman data bandwidth (Traffic In/Out) dari server Cacti ke
+                            file Excel ataupun Google Forms.</p>
+                        <br>
+                        <p><strong>Keunggulan Utama:</strong></p>
+                        <ul>
+                            <li>🔑 <strong>Cookie Auth</strong> — Menggunakan sesi login browser Anda, tidak perlu
+                                simpan password</li>
+                            <li>📊 <strong>Mode Excel</strong> — Otomatis isi template Excel perusahaan dengan nilai
+                                Current, Average, Max</li>
+                            <li>📤 <strong>Mode Google Form</strong> — Upload data peak 24-jam penuh ke formulir
+                                evaluasi kapasitas</li>
+                            <li>🧪 <strong>Dry Run & Demo</strong> — Test tanpa risiko mengubah data</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Accordion: Tab Utama -->
+                <div class="card accordion-card">
+                    <button class="accordion-header" onclick="toggleAccordion(this)">
+                        <span><span class="card-icon">🏠</span> Tab Dashboard (Excel Mode)</span>
+                        <span class="accordion-arrow">▶</span>
+                    </button>
+                    <div class="accordion-body">
+                        <p><strong>Fungsi:</strong> Mengambil data bandwidth pada jam tertentu (09:00 & 16:00) untuk
+                            ditulis ke Excel.</p>
+                        <br>
+                        <p><strong>Langkah-langkah:</strong></p>
+                        <ol>
+                            <li>Pilih <strong>Tanggal Mulai</strong> dan <strong>Tanggal Akhir</strong> menggunakan date
+                                picker.</li>
+                            <li>Tentukan file Excel (opsional — biarkan kosong untuk auto-generate).</li>
+                            <li>Centang <strong>Sheet</strong> mana saja yang ingin diproses di bagian Sheet Selection.
+                            </li>
+                            <li>Klik <strong>🚀 Mulai Rekap</strong>. Data akan ditarik dari Cacti dan ditampilkan di
+                                tab <strong>Preview</strong>.</li>
+                        </ol>
+                        <br>
+                        <p><strong>Opsi Tambahan:</strong></p>
+                        <ul>
+                            <li><em>Skip baris terisi</em> — Melewati baris yang sudah ada datanya di Excel</li>
+                            <li><em>Skip weekend</em> — Lewati hari Sabtu & Minggu</li>
+                            <li><em>Skip hari libur</em> — Lewati tanggal merah & cuti bersama</li>
+                            <li><em>Include Metadata</em> — Tambahkan sheet info di Excel</li>
+                            <li><em>Dry Run</em> — Simulasi tanpa menulis Excel</li>
+                            <li><em>Demo Mode</em> — Gunakan data dummy, tidak perlu koneksi Cacti</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Accordion: Settings -->
+                <div class="card accordion-card">
+                    <button class="accordion-header" onclick="toggleAccordion(this)">
+                        <span><span class="card-icon">⚙️</span> Tab Settings & Cookie</span>
+                        <span class="accordion-arrow">▶</span>
+                    </button>
+                    <div class="accordion-body">
+                        <p><strong>Cookie Browser:</strong> Login ke Cacti di Chrome, lalu copy cookie melalui DevTools:
+                        </p>
+                        <ol>
+                            <li>Tekan <strong>F12</strong> → tab <strong>Application</strong> → <strong>Cookies</strong>
+                            </li>
+                            <li>Cari cookie bernama <strong>Cacti</strong> atau <strong>PHPSESSID</strong></li>
+                            <li>Klik 2x pada Value → Copy → Paste di Settings</li>
+                        </ol>
+                        <br>
+                        <p><strong>URL Cacti:</strong> Alamat root/graph utama dari Cacti monitoring.</p>
+                        <p><strong>Format Waktu:</strong> Sesuaikan dengan format komputer kantor (Titik vs Titik Dua).
+                        </p>
+                        <p><strong>Mapping Interface:</strong> Hubungkan interface Cacti ke nama sheet di template
+                            Excel.</p>
+                    </div>
+                </div>
+
+                <!-- Accordion: Preview -->
+                <div class="card accordion-card">
+                    <button class="accordion-header" onclick="toggleAccordion(this)">
+                        <span><span class="card-icon">👁️</span> Tab Preview</span>
+                        <span class="accordion-arrow">▶</span>
+                    </button>
+                    <div class="accordion-body">
+                        <p>Setelah scraping selesai, data hasil ditampilkan per Sheet/ISP dalam tabel.</p>
+                        <ul>
+                            <li>Klik tab sheet di atas tabel untuk melihat data per interface</li>
+                            <li>Kolom Status menunjukkan apakah data akan menjadi baris baru atau update baris lama</li>
+                            <li>Klik <strong>"Tulis ke Excel"</strong> untuk menyimpan data ke file</li>
+                            <li>File output tersimpan di folder <code>result/</code></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Accordion: Upload Form -->
+                <div class="card accordion-card">
+                    <button class="accordion-header" onclick="toggleAccordion(this)">
+                        <span><span class="card-icon">📤</span> Tab Upload Form</span>
+                        <span class="accordion-arrow">▶</span>
+                    </button>
+                    <div class="accordion-body">
+                        <p><strong>Fungsi:</strong> Upload data kapasitas peak harian ke Google Form secara otomatis.
+                        </p>
+                        <br>
+                        <p><strong>Perbedaan dengan Excel Mode:</strong> Fitur ini independen dari Excel! Ia mendownload
+                            data CSV <strong>00:00–23:59</strong> untuk menemukan peak absolut.</p>
+                        <br>
+                        <p><strong>Langkah:</strong></p>
+                        <ol>
+                            <li>Masukkan URL Google Form (harus akses publik!)</li>
+                            <li>Klik <strong>"Auto Detect IDs"</strong> untuk mengisi entry ID otomatis</li>
+                            <li>Tentukan rentang tanggal dan klik <strong>"Tarik Data & Preview"</strong></li>
+                            <li>Hilangkan centang hari yang ingin di-skip</li>
+                            <li>Klik <strong>"Upload ke Google Form"</strong> dan pantau log status</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <!-- Accordion: Troubleshooting -->
+                <div class="card accordion-card">
+                    <button class="accordion-header" onclick="toggleAccordion(this)">
+                        <span><span class="card-icon">🔧</span> Troubleshooting</span>
+                        <span class="accordion-arrow">▶</span>
+                    </button>
+                    <div class="accordion-body">
+                        <p><strong>Q: "Cookie tidak valid / Sesi habis"</strong></p>
+                        <p>A: Buka Cacti di Chrome → pastikan sudah login → F12 → Network → copy Cookie header → paste
+                            di Settings.</p>
+                        <br>
+                        <p><strong>Q: Google Form HTTP Error 401?</strong></p>
+                        <p>A: Pastikan opsi "Batasi untuk organisasi" di-MATIKAN pada setting Google Form.</p>
+                        <br>
+                        <p><strong>Q: "Permission Error / File Access Denied"</strong></p>
+                        <p>A: Tutup file Excel di Microsoft Office → klik Retry di dashboard.</p>
+                        <br>
+                        <p><strong>Q: Tidak ada data diambil?</strong></p>
+                        <p>A: Pastikan cookie valid, URL benar, dan server Cacti bisa diakses. Coba Demo Mode untuk
+                            testing.</p>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="card" style="text-align: center;">
+                    <p class="text-muted" style="font-size: 0.85rem;">
+                        Dibuat & Dikembangkan oleh: <strong style="color: var(--text-primary);">Rofikul Huda</strong> |
+                        GitHub: @rfypych
+                    </p>
+                    <p class="text-muted" style="font-size: 0.78rem; margin-top: 4px;">
+                        v3.0 — Web Dashboard Edition
+                    </p>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Cookie Help Modal -->
+    <div class="modal-backdrop" id="cookieModal">
+        <div class="modal">
+            <div class="modal-title">🔑 Cara Mendapatkan Cookie Cacti</div>
+            <div class="modal-body">
+                <ol style="padding-left: 18px; line-height: 2;">
+                    <li>Buka Cacti di browser <strong>Chrome/Edge</strong> dan pastikan sudah <strong>login</strong>
+                    </li>
+                    <li>Tekan <strong>F12</strong> untuk membuka Developer Tools</li>
+                    <li>Klik tab <strong>Application</strong> (Chrome) atau <strong>Storage</strong> (Firefox)</li>
+                    <li>Di panel kiri, buka <strong>Cookies</strong> → klik URL Cacti Anda</li>
+                    <li>Cari cookie bernama <strong>"Cacti"</strong> atau <strong>"PHPSESSID"</strong></li>
+                    <li>Klik 2x pada kolom <strong>Value</strong> → <strong>Ctrl+C</strong> untuk meng-copy</li>
+                    <li>Kembali ke sini, paste di field <strong>Cookie Value</strong></li>
+                </ol>
+                <br>
+                <div class="info-box">
+                    💡 <strong>Tips:</strong> Cookie biasanya berupa string panjang acak seperti
+                    <code>a5b3c7d9e1f2...</code>.
+                    Cookie akan expire jika session habis — ulangi langkah ini jika muncul error "Sesi habis".
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('cookieModal')">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
