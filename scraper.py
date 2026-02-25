@@ -156,9 +156,9 @@ class CactiScraper:
         
         # Start new Chrome session with custom profile
         chrome_options = Options()  # Reset options
-        
         # Use a dedicated profile for this app
-        profile_dir = os.path.join(os.path.dirname(__file__), "chrome_profile")
+        import config
+        profile_dir = os.path.join(config.get_app_dir(), "chrome_profile")
         if not os.path.exists(profile_dir):
             os.makedirs(profile_dir)
         chrome_options.add_argument(f"--user-data-dir={profile_dir}")
@@ -189,8 +189,9 @@ class CactiScraper:
         """Load cookies from cacti_cookies.json if available"""
         import os
         import json
+        import config
         
-        cookies_file = os.path.join(os.path.dirname(__file__), "cacti_cookies.json")
+        cookies_file = os.path.join(config.get_app_dir(), "cacti_cookies.json")
         
         if "auth_login.php" in self.driver.current_url:
             self._update_progress("⚠ Terdeteksi halaman Login (cookie expired/invalid).")
@@ -209,10 +210,10 @@ class CactiScraper:
             
             input("Tekan Enter setelah Anda berhasil Login...")
             
-            # Save new cookies for next time
             import json
+            import config
             cookies = self.driver.get_cookies()
-            cookies_file = os.path.join(os.path.dirname(__file__), "cacti_cookies.json")
+            cookies_file = os.path.join(config.get_app_dir(), "cacti_cookies.json")
             
             # Convert to our JSON format
             json_cookies = []
@@ -669,9 +670,10 @@ class CactiScraper:
         import urllib3
         import json
         import os
+        import config
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
-        cookies_file = os.path.join(os.path.dirname(__file__), "cacti_cookies.json")
+        cookies_file = os.path.join(config.get_app_dir(), "cacti_cookies.json")
         if not os.path.exists(cookies_file):
             raise FileNotFoundError(
                 "cacti_cookies.json tidak ditemukan! "
@@ -799,12 +801,47 @@ class CactiScraper:
         self._update_progress(f"Selesai mengambil {len(all_data)} data!", 85)
         return all_data
 
-    def scrape_daily_peak_for_form(self, dates: List[str]) -> List[Dict]:
+    def scrape_daily_peak_for_form(self, dates: List[str], demo_mode: bool = False) -> List[Dict]:
         """
         Khusus untuk Google Form: mengambil Absolute Peak (Max Out) 24 jam per tanggal.
         Mengabaikan time_slots (09:00/16:00) dan mengambil data langsung 00:00 - 23:59.
         """
         all_data = []
+        
+        if demo_mode:
+            self._update_progress("🎮 Running FORM DEMO MODE...", 10)
+            time.sleep(1) # Simulate init
+            
+            total_iterations = len(dates) * len(config.GRAPH_IDS)
+            current_iteration = 0
+            
+            import random
+            for date_str in dates:
+                # Add a bit of natural delay simulation
+                time.sleep(0.1)
+                for interface_name, graph_id in config.GRAPH_IDS.items():
+                    current_iteration += 1
+                    
+                    self._update_progress(
+                        f"🎮 [DEMO] Tarik 24-Jam {date_str} - {interface_name}...", 
+                        10 + int((current_iteration / total_iterations) * 80)
+                    )
+                    
+                    # Generate realistic peak data (mock)
+                    # iForte usually has high traffic, Telkom/Moratel varies
+                    base_val = random.uniform(50.0, 150.0)
+                    mock_peak = f"{base_val:.2f} M"
+                    
+                    all_data.append({
+                        "date": date_str,
+                        "interface": interface_name,
+                        "sheet": config.INTERFACE_TO_SHEET.get(interface_name, interface_name),
+                        "max_in": f"{random.uniform(10.0, 80.0):.2f} M",
+                        "max_out": mock_peak,
+                    })
+            self._update_progress("Selesai menghasilkan data 24-jam Demo.", 100)
+            return all_data
+
         session = self._setup_requests_session()
         
         total_iterations = len(dates) * len(config.GRAPH_IDS)

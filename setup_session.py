@@ -5,10 +5,11 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+import config
 class SessionManager:
     def __init__(self):
         self.driver = None
-        self.cookies_file = "cacti_cookies.json"
+        self.cookies_file = os.path.join(config.get_app_dir(), "cacti_cookies.json")
 
     def open_browser(self, url: str):
         """Membuka browser untuk login manual"""

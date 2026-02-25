@@ -38,7 +38,17 @@ document.addEventListener('DOMContentLoaded', () => {
     loadConfig();
     loadSettings();
     checkSession();
+    setupSyncListeners(); // Initialize once
 });
+
+function setupSyncListeners() {
+    syncToggles('optSkipWeekends', 'setSkipWeekends');
+    syncToggles('optSkipHolidays', 'setSkipHolidays');
+    syncToggles('optMetadata', 'setMetadata');
+    syncToggles('optSkipFilled', 'setSkipFilled');
+    syncToggles('optDryRun', 'setDryRun');
+    syncToggles('optDemoMode', 'setDemoMode');
+}
 
 // ============================================================
 // THEME TOGGLE
@@ -143,6 +153,22 @@ async function loadConfig() {
     }
 }
 
+async function browseExcel(inputId) {
+    try {
+        const data = await apiFetch('/api/utils/browse-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'save' })
+        });
+        if (data.success && data.path) {
+            document.getElementById(inputId).value = data.path;
+            showToast('Lokasi simpan terpilih: ' + data.path.split(/[/\\]/).pop(), 'success');
+        }
+    } catch (e) {
+        // error handled
+    }
+}
+
 async function loadSettings() {
     try {
         appSettings = await apiFetch('/api/settings');
@@ -160,14 +186,22 @@ function populateSheetSelector() {
     const selected = appSettings.selected_sheets || {};
 
     for (const [key, sheetName] of Object.entries(interfaces)) {
-        const isSelected = selected[sheetName] !== false;
+        // PARITY: LocalNet UNCHECKED by default if no setting saved
+        let isSelected = true;
+        if (selected[sheetName] !== undefined) {
+            isSelected = selected[sheetName];
+        } else if (sheetName.toLowerCase().includes('localnet')) {
+            isSelected = false;
+        }
+
         const chip = document.createElement('label');
         chip.className = `sheet-chip ${isSelected ? 'selected' : ''}`;
         chip.innerHTML = `
             <input type="checkbox" value="${sheetName}" ${isSelected ? 'checked' : ''}>
             ${sheetName}
         `;
-        chip.addEventListener('click', () => {
+        chip.addEventListener('click', (e) => {
+            // Checkbox change happens after click
             setTimeout(() => {
                 const cb = chip.querySelector('input');
                 chip.classList.toggle('selected', cb.checked);
@@ -202,14 +236,28 @@ function applySettingsToUI() {
     setChecked('optSkipFilled', appSettings.skip_filled_rows, true);
     setChecked('optMetadata', appSettings.include_metadata, true);
     setChecked('optDryRun', appSettings.dry_run_mode, false);
+    setChecked('optDemoMode', appSettings.demo_mode, false);
 
-    // Settings page options
+    // Settings tab options (sync)
     setChecked('setSkipWeekends', appSettings.skip_weekends, true);
     setChecked('setSkipHolidays', appSettings.skip_holidays, false);
+    setChecked('setSkipFilled', appSettings.skip_filled_rows, true);
     setChecked('setMetadata', appSettings.include_metadata, true);
+    setChecked('setDryRun', appSettings.dry_run_mode, false);
+    setChecked('setDemoMode', appSettings.demo_mode, false);
 
     // Mapping editor
     populateMapping();
+}
+
+function syncToggles(id1, id2) {
+    const el1 = document.getElementById(id1);
+    const el2 = document.getElementById(id2);
+    if (!el1 || !el2) return;
+
+    // Remove existing if any to prevent double-firing
+    el1.onchange = () => { el2.checked = el1.checked; };
+    el2.onchange = () => { el1.checked = el2.checked; };
 }
 
 function setChecked(id, value, defaultValue) {
@@ -631,7 +679,10 @@ async function saveSettings() {
         time_format: document.querySelector('input[name="timeFormat"]:checked').value,
         skip_weekends: document.getElementById('setSkipWeekends').checked,
         skip_holidays: document.getElementById('setSkipHolidays').checked,
+        skip_filled_rows: document.getElementById('setSkipFilled').checked,
         include_metadata: document.getElementById('setMetadata').checked,
+        dry_run_mode: document.getElementById('setDryRun').checked,
+        demo_mode: document.getElementById('setDemoMode').checked,
     };
 
     try {
@@ -644,7 +695,10 @@ async function saveSettings() {
         // Sync dashboard options too
         setChecked('optSkipWeekends', payload.skip_weekends);
         setChecked('optSkipHolidays', payload.skip_holidays);
+        setChecked('optSkipFilled', payload.skip_filled_rows);
         setChecked('optMetadata', payload.include_metadata);
+        setChecked('optDryRun', payload.dry_run_mode);
+        setChecked('optDemoMode', payload.demo_mode);
     } catch (e) { }
 }
 
@@ -757,6 +811,7 @@ async function scrapeFormPeak() {
             body: JSON.stringify({
                 start_date: htmlDateToDisplay(startDate),
                 end_date: htmlDateToDisplay(endDate),
+                demo_mode: document.getElementById('formDemoMode').checked
             })
         });
 
@@ -769,7 +824,7 @@ async function scrapeFormPeak() {
     }
 }
 
-function startFormLogStream() {
+function startFormLogStream(onCompleteCallback) {
     if (formEventSource) formEventSource.close();
 
     formEventSource = new EventSource('/api/form/scrape-logs');
@@ -778,13 +833,14 @@ function startFormLogStream() {
         const data = JSON.parse(event.data);
 
         if (data.log) {
-            addLogEntry(data.log, 'formLogViewer');
+            addFormLog(data.log);
         }
 
         if (data.done) {
             formEventSource.close();
             formEventSource = null;
-            onFormScrapeComplete();
+            if (onCompleteCallback) onCompleteCallback();
+            else onFormScrapeComplete();
         }
     };
 
@@ -792,7 +848,10 @@ function startFormLogStream() {
         setTimeout(async () => {
             try {
                 const st = await apiFetch('/api/form/scrape-status');
-                if (!st.running) onFormScrapeComplete();
+                if (!st.running) {
+                    if (onCompleteCallback) onCompleteCallback();
+                    else onFormScrapeComplete();
+                }
             } catch (e) { }
         }, 2000);
     };
@@ -875,14 +934,12 @@ async function uploadToForm() {
         return;
     }
 
-    addFormLog(`========= MULAI UPLOAD${modeText} =========`);
-
     const btn = document.getElementById('btnFormUpload');
     btn.disabled = true;
     btn.textContent = '⏳ Mengupload...';
 
     try {
-        const data = await apiFetch('/api/form/upload', {
+        await apiFetch('/api/form/upload', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -893,20 +950,15 @@ async function uploadToForm() {
             })
         });
 
-        // Log results
-        if (data.results) {
-            data.results.forEach(r => {
-                const icon = r.success ? '✅' : '❌';
-                addFormLog(`${icon} ${r.date}: ${r.message}`);
-            });
-        }
-
-        addFormLog(`========= ${data.summary} =========`);
-        showToast(data.summary, 'success');
+        // Backend streams logs via SSE
+        startFormLogStream(() => {
+            btn.disabled = false;
+            btn.textContent = '▶️ Upload ke Google Form';
+            showToast('Upload Selesai!', 'success');
+        });
 
     } catch (e) {
         // Error shown by apiFetch
-    } finally {
         btn.disabled = false;
         btn.textContent = '▶️ Upload ke Google Form';
     }
@@ -1002,4 +1054,21 @@ function showToast(message, type = 'info', duration = 4500) {
         toast.classList.add('removing');
         setTimeout(() => toast.remove(), 300);
     }, duration);
+}
+
+// ============================================================
+// SYSTEM COMMANDS
+// ============================================================
+async function shutdownServer() {
+    if (confirm("Yakin ingin mematikan Web Dashboard? Aplikasi akan berhenti berjalan di background dan browser ini tidak bisa digunakan lagi sampai program dijalankan ulang.")) {
+        try {
+            await apiFetch('/api/shutdown', { method: 'POST' });
+            showToast("Server sedang dimatikan...", "success");
+            setTimeout(() => {
+                document.body.innerHTML = '<div style="display:flex; height:100vh; width:100vw; align-items:center; justify-content:center; flex-direction:column; background:#111827; color:#f3f4f6; font-family:sans-serif;"><h1>🔴 Server Dimatikan</h1><p>Anda dapat menutup tab browser ini.</p></div>';
+            }, 1000);
+        } catch (e) {
+            showToast("Gagal mematikan server: " + e.message, "error");
+        }
+    }
 }

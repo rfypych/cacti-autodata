@@ -27,7 +27,8 @@ def get_chrome_cookies_path() -> Optional[str]:
     return None
 
 
-def copy_cookies_for_domain(domain: str, output_file: str = "cacti_cookies.json") -> bool:
+import config
+def copy_cookies_for_domain(domain: str, output_file: str = os.path.join(config.get_app_dir(), "cacti_cookies.json")) -> bool:
     """
     Copy cookies for a specific domain from Chrome
     
@@ -104,7 +105,7 @@ def copy_cookies_for_domain(domain: str, output_file: str = "cacti_cookies.json"
             os.remove(temp_cookies)
 
 
-def load_cookies_to_selenium(driver, cookies_file: str = "cacti_cookies.json") -> bool:
+def load_cookies_to_selenium(driver, cookies_file: str = os.path.join(config.get_app_dir(), "cacti_cookies.json")) -> bool:
     """
     Load cookies from JSON file to Selenium WebDriver
     

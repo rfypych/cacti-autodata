@@ -28,8 +28,8 @@ from settings_manager import load_settings, save_settings, update_settings, DEFA
 from form_submitter import GoogleFormSubmitter, parse_bandwidth_to_mbps, format_mbps
 
 app = Flask(__name__,
-            template_folder='templates',
-            static_folder='static')
+            template_folder=os.path.join(config.get_resource_dir(), 'templates'),
+            static_folder=os.path.join(config.get_resource_dir(), 'static'))
 
 # ============================================================
 # SHARED STATE (thread-safe)
@@ -107,6 +107,33 @@ state = AppState()
 # ============================================================
 # ROUTES - Pages
 # ============================================================
+# ============================================================
+# INITIALIZATION: Apply saved settings to config
+# ============================================================
+def init_config_from_settings():
+    settings = load_settings()
+    if "cacti_url" in settings:
+        config.CACTI_URL = settings["cacti_url"]
+    if "skip_weekends" in settings:
+        config.SKIP_WEEKENDS = settings["skip_weekends"]
+    if "skip_holidays" in settings:
+        config.SKIP_HOLIDAYS = settings["skip_holidays"]
+    if "skip_filled_rows" in settings:
+        config.SKIP_FILLED_ROWS = settings["skip_filled_rows"]
+    if "include_metadata" in settings:
+        config.INCLUDE_METADATA = settings["include_metadata"]
+    if "time_format" in settings:
+        fmt = settings["time_format"]
+        config.TIME_FORMAT_EXCEL = "%H.%M" if fmt == "dot" else "%H:%M"
+    if "interface_mapping" in settings:
+        config.INTERFACE_TO_SHEET = settings["interface_mapping"]
+    if "google_form_url" in settings:
+        config.GOOGLE_FORM_URL = settings["google_form_url"]
+    if "google_form_entries" in settings:
+        config.GOOGLE_FORM_ENTRIES = settings["google_form_entries"]
+
+init_config_from_settings()
+
 @app.route('/')
 def index():
     return render_template('dashboard.html')
@@ -164,6 +191,23 @@ def save_settings_api():
         config.TIME_FORMAT_EXCEL = "%H.%M" if fmt == "dot" else "%H:%M"
     if "interface_mapping" in data:
         config.INTERFACE_TO_SHEET = data["interface_mapping"]
+    
+    # Standardize selected_sheets if provided as list from frontend
+    if "selected_sheets" in data and isinstance(data["selected_sheets"], list):
+        # Convert list ["Sheet1", "Sheet2"] -> dict {"Sheet1": True, "Sheet2": True}
+        # We also need to keep track of sheets NOT in the list as False if they were previously there
+        current_settings = load_settings()
+        old_selected = current_settings.get("selected_sheets", {})
+        new_selected = {k: False for k in old_selected.keys()} # Reset all to False
+        for s in data["selected_sheets"]:
+            new_selected[s] = True
+        data["selected_sheets"] = new_selected
+        
+    # Handle Google Form fields
+    if "google_form_url" in data:
+        config.GOOGLE_FORM_URL = data["google_form_url"]
+    if "google_form_entries" in data:
+        config.GOOGLE_FORM_ENTRIES = data["google_form_entries"]
 
     # Save to file
     success = update_settings(data)
@@ -196,13 +240,57 @@ def update_cookie():
 @app.route('/api/session/status', methods=['GET'])
 def session_status():
     """Check if a valid cookie file exists."""
-    cookie_file = os.path.join(os.path.dirname(__file__), 'cacti_cookies.json')
+    cookie_file = os.path.join(config.get_app_dir(), 'cacti_cookies.json')
     exists = os.path.exists(cookie_file)
     age = None
     if exists:
         mtime = os.path.getmtime(cookie_file)
         age = int(time.time() - mtime)
     return jsonify({"exists": exists, "age_seconds": age})
+
+
+@app.route('/api/utils/browse-file', methods=['POST'])
+def browse_file():
+    """Trigger a native OS file dialog to select/save an Excel file."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        
+        root = tk.Tk()
+        root.withdraw()  # Hide the main window
+        root.wm_attributes("-topmost", 1)  # Bring to front
+        
+        data = request.get_json() or {}
+        mode = data.get("mode", "save") # "save" or "open"
+        initial_dir = data.get("initial_dir", os.path.join(config.get_app_dir(), "result"))
+        
+        if not os.path.exists(initial_dir):
+            os.makedirs(initial_dir, exist_ok=True)
+            
+        if mode == "save":
+            filename = filedialog.asksaveasfilename(
+                parent=root,
+                initialdir=initial_dir,
+                title="Simpan File Excel",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                defaultextension=".xlsx",
+                initialfile=f"Cacti_Data_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            )
+        else:
+            filename = filedialog.askopenfilename(
+                parent=root,
+                initialdir=initial_dir,
+                title="Pilih File Excel",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+            )
+            
+        root.destroy()
+        
+        if filename:
+            return jsonify({"success": True, "path": filename})
+        return jsonify({"success": False, "message": "Dibatalkan oleh user"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ============================================================
@@ -248,6 +336,14 @@ def start_scrape():
         config.SKIP_FILLED_ROWS = data["skip_filled_rows"]
     if data.get("include_metadata") is not None:
         config.INCLUDE_METADATA = data["include_metadata"]
+
+    # Persist last used values to settings_manager (EXE readiness)
+    update_settings({
+        "last_excel_path": excel_path,
+        "last_start_date": start_date.strftime("%d/%m/%Y"),
+        "last_end_date": end_date.strftime("%d/%m/%Y"),
+        "selected_sheets": {s: True for s in selected_sheets} # Standardize to dict
+    })
 
     state.reset()
     state.is_running = True
@@ -478,6 +574,8 @@ def scrape_form_peak():
     if start_date > end_date:
         return jsonify({"error": "Tanggal akhir harus >= tanggal mulai!"}), 400
 
+    is_demo_mode = data.get("demo_mode", False)
+
     state.form_running = True
     state.form_scraped_data = []
     state.form_aggregated = {}
@@ -485,7 +583,7 @@ def scrape_form_peak():
 
     thread = threading.Thread(
         target=_form_scrape_worker,
-        args=(start_date, end_date),
+        args=(start_date, end_date, is_demo_mode),
         daemon=True
     )
     thread.start()
@@ -569,24 +667,21 @@ def upload_to_form():
     if not state.form_scraped_data:
         return jsonify({"error": "Belum ada data! Jalankan 'Tarik Data' terlebih dahulu."}), 400
 
-    submitter = GoogleFormSubmitter(form_url, entry_mapping)
+    if state.form_running:
+        return jsonify({"error": "Proses form sedang berjalan!"}), 409
 
-    # Filter by checked dates
-    filtered_data = [d for d in state.form_scraped_data
-                     if d.get('date') in checked_dates] if checked_dates else state.form_scraped_data
+    state.form_running = True
 
-    results = []
-    def on_progress(date_str, success, msg):
-        results.append({"date": date_str, "success": success, "message": msg})
-        state.add_form_log(f"{'✅' if success else '❌'} {date_str}: {msg}")
+    thread = threading.Thread(
+        target=_form_upload_worker,
+        args=(form_url, entry_mapping, checked_dates, is_dry_run),
+        daemon=True
+    )
+    thread.start()
 
-    submitter.submit_all(filtered_data, dry_run=is_dry_run, progress_callback=on_progress)
-
-    success_count = sum(1 for r in results if r["success"])
     return jsonify({
         "success": True,
-        "results": results,
-        "summary": f"{success_count}/{len(results)} berhasil diupload"
+        "message": "Proses upload dimulai..."
     })
 
 
@@ -660,10 +755,11 @@ def _scraping_worker(start_date, end_date, excel_path, is_dry_run, is_demo_mode,
             state.is_running = False
 
 
-def _form_scrape_worker(start_date, end_date):
+def _form_scrape_worker(start_date, end_date, demo_mode=False):
     """Background worker for 24-hour peak scraping (for Google Form)."""
     try:
-        state.add_form_log("========= MULAI PREVIEW 24-JAM =========")
+        mode_text = " 🎮 DEMO MODE" if demo_mode else ""
+        state.add_form_log(f"========= MULAI PREVIEW 24-JAM{mode_text} =========")
 
         scraper = CactiScraper(
             progress_callback=lambda msg, pct: state.add_form_log(msg)
@@ -677,7 +773,7 @@ def _form_scrape_worker(start_date, end_date):
 
         state.add_form_log(f"Menarik data 24-Jam untuk {len(dates_to_scrape)} hari...")
 
-        raw_data = scraper.scrape_daily_peak_for_form(dates_to_scrape)
+        raw_data = scraper.scrape_daily_peak_for_form(dates_to_scrape, demo_mode=demo_mode)
 
         dummy_submitter = GoogleFormSubmitter("", {})
         aggregated = dummy_submitter.aggregate_daily_data(raw_data)
@@ -695,16 +791,61 @@ def _form_scrape_worker(start_date, end_date):
         state.form_running = False
 
 
+def _form_upload_worker(form_url, entry_mapping, checked_dates, is_dry_run):
+    """Background worker for uploading data to Google Form."""
+    try:
+        submitter = GoogleFormSubmitter(form_url, entry_mapping)
+
+        # Filter by checked dates
+        filtered_data = [d for d in state.form_scraped_data
+                         if d.get('date') in checked_dates] if checked_dates else state.form_scraped_data
+
+        results = []
+        def on_progress(date_str, success, msg):
+            results.append({"date": date_str, "success": success, "message": msg})
+            state.add_form_log(f"{'✅' if success else '❌'} {date_str}: {msg}")
+
+        submitter.submit_all(filtered_data, dry_run=is_dry_run, progress_callback=on_progress)
+
+        success_count = sum(1 for r in results if r["success"])
+        state.add_form_log(f"========= {success_count}/{len(results)} berhasil diupload =========")
+
+    except Exception as e:
+        state.add_form_log(f"❌ Error upload: {str(e)}")
+
+    finally:
+        state.form_running = False
+
+
+@app.route('/api/shutdown', methods=['POST'])
+def shutdown_server():
+    """Endpoint for gracefully shutting down the web server executable."""
+    # Run shutdown in a background thread to allow this request to complete
+    def delayed_exit():
+        import time
+        time.sleep(1)
+        import os
+        os._exit(0)
+    
+    threading.Thread(target=delayed_exit, daemon=True).start()
+    return jsonify({"success": True, "message": "Server is shutting down..."})
+
 # ============================================================
 # ENTRY POINT
 # ============================================================
 
-if __name__ == '__main__':
+def run_server(port=8181):
+    """Start the Flask server on the specified port"""
     print("=" * 50)
     print("🌵 Cacti AutoData - Web Dashboard")
     print("=" * 50)
-    print("Buka browser: http://localhost:5000")
+    print(f"Buka browser: http://localhost:{port}")
     print("Ctrl+C untuk menghentikan server")
     print("=" * 50)
+    app.run(debug=True, port=port, host='0.0.0.0', use_reloader=False)
 
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+if __name__ == '__main__':
+    # When run directly, get port from settings or fallback to default
+    settings = load_settings()
+    port = settings.get("web_port", 8181)
+    run_server(port=port)

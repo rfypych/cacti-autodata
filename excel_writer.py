@@ -172,6 +172,38 @@ class ExcelWriter:
             return f"{hours:02d}.{minutes:02d}"
         return str(cell_value).strip()
     
+    def _find_best_new_row(self, sheet: Worksheet, target_time_str: str) -> int:
+        """
+        Mencari baris kosong teratas yang sesuai dengan template (jika ada waktu yang sudah diset).
+        Menghindari penulisan di luar template jika template sudah memiliki border/waktu.
+        """
+        # Batasi pencarian untuk performa
+        max_search = getattr(sheet, 'max_row', 1000) + 100
+        if max_search < 100: max_search = 1000
+        
+        targ_clean = target_time_str.replace(":", ".").strip().lstrip("0")
+        
+        for row in range(config.EXCEL_DATA_START_ROW, max_search):
+            date_val = sheet.cell(row=row, column=config.EXCEL_COL_TANGGAL).value
+            data_in = sheet.cell(row=row, column=config.EXCEL_COL_CURR_IN).value
+            time_val = sheet.cell(row=row, column=config.EXCEL_COL_WAKTU).value
+            
+            is_date_empty = (date_val is None or str(date_val).strip() == "")
+            is_data_empty = (data_in is None or str(data_in).strip() == "")
+            current_time_str = self._cell_to_time_string(time_val)
+            
+            if is_data_empty:
+                # 1. Jika baris ini benar-benar kosong (tidak ada tanggal, tidak ada data, tidak ada batas format)
+                if is_date_empty and (time_val is None or str(time_val).strip() == ""):
+                    return row
+                    
+                # 2. Jika template punya pre-filled jam (misal 09.00), pastikan cocok dengan jam target kita
+                curr_clean = current_time_str.replace(":", ".").strip().lstrip("0")
+                if curr_clean == targ_clean:
+                    return row
+                    
+        return getattr(sheet, 'max_row', config.EXCEL_DATA_START_ROW) + 1
+    
     def write_data_to_row(self, sheet: Worksheet, row: int, data: Dict):
         """Tulis data ke baris (update atau baru)"""
         # Pastikan tanggal dan waktu ditulis juga (penting untuk baris baru)
@@ -260,8 +292,13 @@ class ExcelWriter:
                     row_num = row
                     self._update_progress(f"✓ Update {sheet_name}: baris {row}", 86 + int((i/total)*12))
             else:
-                # Append new row
-                new_row = sheet.max_row + 1
+                # Append new row (smart row detection for templates)
+                target_time_str = f"{data['time_hour']:02d}.{data['time_minute']:02d}"
+                if config.TIME_FORMAT_EXCEL:
+                    dummy = datetime(2000, 1, 1, data['time_hour'], data['time_minute'])
+                    target_time_str = dummy.strftime(config.TIME_FORMAT_EXCEL)
+                
+                new_row = self._find_best_new_row(sheet, target_time_str)
                 self.write_data_to_row(sheet, new_row, data)
                 new_rows += 1
                 status = "New"

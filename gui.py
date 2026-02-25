@@ -22,6 +22,7 @@ from typing import Optional, Dict, List
 from setup_session import SessionManager
 
 import config
+import web_app
 from scraper import run_scraper
 from excel_writer import write_to_excel
 from languages import LANGUAGES, get_text
@@ -208,8 +209,8 @@ class CactiAutoDataGUI:
         self.end_date_var = tk.StringVar(value=self.settings.get("last_end_date") or datetime.now().strftime("%d/%m/%Y"))
         
         # Form upload vars
-        self.upload_start_date_var = tk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
-        self.upload_end_date_var = tk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
+        self.upload_start_date_var = tk.StringVar(value=self.settings.get("last_start_date") or datetime.now().strftime("%d/%m/%Y"))
+        self.upload_end_date_var = tk.StringVar(value=self.settings.get("last_end_date") or datetime.now().strftime("%d/%m/%Y"))
         self.excel_path_var = tk.StringVar(value=self.settings.get("last_excel_path", ""))
         self.status_var = tk.StringVar(value=get_text("status_waiting", self.current_lang))
         self.progress_var = tk.DoubleVar(value=0)
@@ -228,9 +229,14 @@ class CactiAutoDataGUI:
         # Data storage for preview
         self.scraped_data: List[Dict] = []
         
+        
         self.is_running = False
+        self.web_server_thread = None
         
         self._create_notebook()
+        
+        # Apply settings to config module immediately on startup
+        self._apply_settings_to_config()
     
     def _create_notebook(self):
         """Create tabbed interface"""
@@ -272,6 +278,21 @@ class CactiAutoDataGUI:
             font=("Segoe UI", 16, "bold")
         )
         self.title_label.pack(side=tk.LEFT)
+        
+        # Web Dashboard Launcher Button
+        self.web_btn = tk.Button(
+            title_row,
+            text=" 🌐 BUKA WEB DASHBOARD ",
+            font=("Segoe UI", 10, "bold"),
+            bg="#0ea5e9",
+            fg="white",
+            relief="flat",
+            cursor="hand2",
+            padx=15,
+            pady=5,
+            command=self._launch_web_dashboard
+        )
+        self.web_btn.pack(side=tk.LEFT, padx=(30, 5), pady=2)
         
         # Help Button (Moved from bottom)
         self.help_btn = ttk.Button(
@@ -441,15 +462,26 @@ class CactiAutoDataGUI:
     
     def _create_settings_tab(self):
         """Create settings tab content"""
+        lang = self.current_lang
+        main_settings = self.settings_frame
+
         # URL Cacti
-        url_frame = ttk.LabelFrame(self.settings_frame, text="🌐 Cacti URL", padding="10")
+        url_frame = ttk.LabelFrame(main_settings, text=get_text("settings_cacti", lang), padding="10")
         url_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.url_var = tk.StringVar(value=self.settings.get("cacti_url", config.CACTI_URL))
-        ttk.Entry(url_frame, textvariable=self.url_var, width=60).pack(fill=tk.X, pady=(0, 5))
+        ttk.Entry(url_frame, textvariable=self.url_var, width=60).pack(fill=tk.X, pady=(0, 5)) # Original width was 60
         
-        # Login Button
-        login_frame = ttk.Frame(url_frame)
+        # Web Configuration
+        web_frame = ttk.LabelFrame(main_settings, text="🌐 Web Dashboard Configuration (Hybrid Mode)", padding="10")
+        web_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(web_frame, text="Port Web Dashboard (Default 8181):").grid(row=0, column=0, sticky='w', pady=2)
+        self.web_port_var = tk.IntVar(value=self.settings.get("web_port", 8181))
+        ttk.Entry(web_frame, textvariable=self.web_port_var, width=15).grid(row=0, column=1, sticky='w', padx=10, pady=2)
+        
+        # Login Button (moved from url_frame to main_settings context for clarity, but still related to URL)
+        login_frame = ttk.Frame(url_frame) # Keep login_frame inside url_frame as it's related to URL/session
         login_frame.pack(fill=tk.X)
         
         ttk.Label(login_frame, text="Cookie expired?").pack(side=tk.LEFT)
@@ -466,7 +498,7 @@ class CactiAutoDataGUI:
         ).pack(side=tk.LEFT)
         
         # Time Format
-        time_frame = ttk.LabelFrame(self.settings_frame, text="⏰ Time Format in Excel", padding="10")
+        time_frame = ttk.LabelFrame(main_settings, text=get_text("settings_time", lang), padding="10") # Changed to main_settings
         time_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.time_format_var = tk.StringVar(value=self.settings.get("time_format", "dot"))
@@ -628,7 +660,7 @@ class CactiAutoDataGUI:
         url_frame = ttk.LabelFrame(self.upload_frame, text="🔗 Google Form URL", padding="10")
         url_frame.pack(fill=tk.X, pady=(0, 10))
         
-        self.form_url_var = tk.StringVar(value=config.GOOGLE_FORM_URL)
+        self.form_url_var = tk.StringVar(value=self.settings.get("google_form_url", config.GOOGLE_FORM_URL))
         ttk.Entry(url_frame, textvariable=self.form_url_var, width=80).pack(fill=tk.X)
         
         # Mapping Frame
@@ -639,10 +671,13 @@ class CactiAutoDataGUI:
                   foreground="gray").grid(row=0, column=0, columnspan=3, pady=(0, 10), sticky="w")
         
         self.form_entries = {}
+        saved_entries = self.settings.get("google_form_entries", {})
         row = 1
         for key, default_val in config.GOOGLE_FORM_ENTRIES.items():
             ttk.Label(map_frame, text=key.capitalize()).grid(row=row, column=0, sticky="w", pady=2)
-            var = tk.StringVar(value=default_val)
+            # Priority: settings.json > config.py
+            val = saved_entries.get(key) if saved_entries.get(key) else default_val
+            var = tk.StringVar(value=val)
             self.form_entries[key] = var
             ttk.Entry(map_frame, textvariable=var, width=30).grid(row=row, column=1, sticky="w", padx=10, pady=2)
             row += 1
@@ -663,7 +698,10 @@ class CactiAutoDataGUI:
         self.upload_end_entry.grid(row=0, column=4, padx=(5, 2))
         ttk.Button(scrape_frame, text="📅", width=3, command=lambda: self._show_calendar("upload_end")).grid(row=0, column=5)
         
-        ttk.Button(scrape_frame, text="🔍 Tarik Data 24-Jam & Preview", command=self._run_form_preview_thread).grid(row=0, column=6, padx=20)
+        self.form_demo_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(scrape_frame, text="🎮 Demo Mode", variable=self.form_demo_var).grid(row=0, column=6, padx=(10, 5))
+        
+        ttk.Button(scrape_frame, text="🔍 Tarik Data 24-Jam & Preview", command=self._run_form_preview_thread).grid(row=0, column=7, padx=10)
         
         # Preview Form Frame
         preview_frame = ttk.LabelFrame(self.upload_frame, text="👁️ Preview Hasil Agregasi Harian (Siap Upload)", padding="10")
@@ -809,8 +847,13 @@ class CactiAutoDataGUI:
         
     def _form_preview_task(self, start_date, end_date):
         self.root.after(0, lambda: self._log_upload("========= MULAI PREVIEW 24-JAM ========="))
-        from scraper import CactiScraper
-        
+        import threading
+        import queue
+        import webbrowser
+        import web_app
+
+        # Import existing core modules
+        from scraper import CactiScraper, config       
         scraper = CactiScraper(progress_callback=lambda msg, pct: self.root.after(0, lambda: self._log_upload(msg)))
         
         # Generate list of dates
@@ -820,10 +863,12 @@ class CactiAutoDataGUI:
             dates_to_scrape.append(curr.strftime("%d/%m/%Y"))
             curr += timedelta(days=1)
             
-        self.root.after(0, lambda: self._log_upload(f"Menarik detail 24-Jam untuk {len(dates_to_scrape)} hari..."))
+        demo_mode = self.form_demo_var.get()
+        mode_text = " 🎮 DEMO MODE" if demo_mode else ""
+        self.root.after(0, lambda: self._log_upload(f"Menarik detail 24-Jam{mode_text} untuk {len(dates_to_scrape)} hari..."))
         
         try:
-            raw_data = scraper.scrape_daily_peak_for_form(dates_to_scrape)
+            raw_data = scraper.scrape_daily_peak_for_form(dates_to_scrape, demo_mode=demo_mode)
             
             # Aggregate them to calculate total
             from form_submitter import GoogleFormSubmitter
@@ -1196,7 +1241,7 @@ class CactiAutoDataGUI:
                     if config.INCLUDE_METADATA:
                         metadata = {
                             "Generated At": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "Data Period": f"{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}",
+                            "Data Period": f"{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%Y/%m/%Y')}",
                             "User": os.getlogin(),
                             "Mode": "Demo / Mock" if is_demo_mode else "Live Scraping",
                             "Source URL": config.CACTI_URL,
@@ -1230,7 +1275,7 @@ class CactiAutoDataGUI:
                             should_retry = response_queue.get()
                             
                             if not should_retry:
-                                self._update_progress(f"❌ Penyimpanan dibatalkan oleh user.")
+                                self._update_progress(f"🔄 Penyimpanan dibatalkan oleh user.")
                                 return # Exit thread/process
                             
                             self._update_progress(f"🔄 Mencoba menyimpan ulang...", 50)
@@ -1405,7 +1450,10 @@ class CactiAutoDataGUI:
             "skip_holidays": self.skip_holidays_var.get(),
             "include_metadata": self.include_metadata_var.get(),
             "dry_run_mode": self.dry_run_var.get(),
-            "language": self.current_lang,
+            "language": self.current_lang, # Kept self.current_lang as self.lang_var was not defined
+            "google_form_url": self.form_url_var.get(),
+            "google_form_entries": {k: v.get() for k, v in self.form_entries.items()},
+            "web_port": self.web_port_var.get()
         }
         
         self.settings.update(new_settings)
@@ -1579,7 +1627,37 @@ class CactiAutoDataGUI:
     def _on_close(self):
         """Handle window close"""
         self._save_last_used()
-        self.root.quit()
+        # Kill the entire process tree to ensure Flask and Selenium close instantly
+        import os
+        os._exit(0)
+        
+    def _start_web_server_thread(self, port):
+        """Run flask server silently without blocking GUI."""
+        try:
+            # Setting use_reloader=False is critical when running inside tkinter
+            web_app.app.run(port=port, host='0.0.0.0', debug=False, use_reloader=False)
+        except Exception as e:
+            print(f"Web server error: {e}")
+            
+    def _launch_web_dashboard(self):
+        """Start the web server if not running, then open browser."""
+        port = self.settings.get("web_port", 8181)
+        url = f"http://localhost:{port}"
+        
+        if self.web_server_thread is None or not self.web_server_thread.is_alive():
+            self.web_btn.config(text=" ⏳ MEMULAI SERVER... ", bg="#94a3b8", state=tk.DISABLED)
+            self.root.update()
+            
+            # Start flask in background
+            self.web_server_thread = threading.Thread(target=self._start_web_server_thread, args=(port,), daemon=True)
+            self.web_server_thread.start()
+            
+            # Reset button state
+            self.root.after(1500, lambda: self.web_btn.config(text=" 🌐 BUKA WEB DASHBOARD ", bg="#0ea5e9", state=tk.NORMAL))
+            self.root.after(1500, lambda: webbrowser.open(url))
+        else:
+            # Already running, just open browser
+            webbrowser.open(url)
     
     def run(self):
         """Run the GUI"""

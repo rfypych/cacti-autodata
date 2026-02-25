@@ -7,7 +7,7 @@
     <meta name="description"
         content="Cacti AutoData Web Dashboard - Modern interface for automated bandwidth data collection">
     <title>🌵 Cacti AutoData Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=3.1">
 </head>
 
 <body>
@@ -63,9 +63,15 @@
             </nav>
 
             <div class="sidebar-footer">
-                <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()">
+                <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()"
+                    style="margin-bottom: 8px;">
                     <span class="theme-icon" id="themeIcon">☀️</span>
                     <span id="themeLabel">Light Mode</span>
+                </button>
+                <button class="theme-toggle-btn" onclick="shutdownServer()"
+                    style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);">
+                    <span class="theme-icon">🛑</span>
+                    <span>Matikan Server</span>
                 </button>
                 <div class="session-status" id="sessionStatusArea">
                     <span class="status-dot" id="sessionDot"></span>
@@ -131,8 +137,13 @@
                     <div class="form-group">
                         <label for="excelPath">File Excel Output <span class="text-muted">(opsional — kosongkan untuk
                                 auto-generate)</span></label>
-                        <input type="text" id="excelPath"
-                            placeholder="Contoh: result/Cacti_Data_20260201_20260228.xlsx">
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="excelPath"
+                                placeholder="Contoh: result/Cacti_Data_20260201_20260228.xlsx" style="flex:1;">
+                            <button class="btn btn-secondary" id="btnBrowseExcel" onclick="browseExcel('excelPath')"
+                                title="Pilih lokasi simpan" style="padding: 0 12px; white-space: nowrap;">📁
+                                Browse</button>
+                        </div>
                         <small class="text-muted mt-2" id="autoPathHint" style="display:none;">📁 File akan disimpan
                             otomatis ke folder <code>result/</code></small>
                     </div>
@@ -334,6 +345,11 @@
                         </div>
                     </div>
                     <div class="toggle-group flex-col">
+                        <label class="toggle-item" title="Abaikan baris Excel yang sudah ada datanya.">
+                            <input type="checkbox" id="setSkipFilled" checked>
+                            <span class="toggle-switch"></span>
+                            Skip baris terisi
+                        </label>
                         <label class="toggle-item" title="Data hari Sabtu dan Minggu tidak akan diambil.">
                             <input type="checkbox" id="setSkipWeekends" checked>
                             <span class="toggle-switch"></span>
@@ -343,13 +359,24 @@
                             title="Lewati tanggal merah dan hari libur nasional Indonesia secara otomatis.">
                             <input type="checkbox" id="setSkipHolidays">
                             <span class="toggle-switch"></span>
-                            🎆 Skip Hari Libur Nasional
+                            🎆 Skip Hari Libur
                         </label>
                         <label class="toggle-item"
                             title="Tambahkan sheet Metadata di file Excel berisi info waktu generate, sumber URL, dan konfigurasi.">
                             <input type="checkbox" id="setMetadata" checked>
                             <span class="toggle-switch"></span>
-                            📋 Include Metadata Sheet
+                            📋 Include Metadata
+                        </label>
+                        <label class="toggle-item" title="Jalankan scraper tanpa melakukan perubahan file/form.">
+                            <input type="checkbox" id="setDryRun">
+                            <span class="toggle-switch"></span>
+                            🧪 Dry Run
+                        </label>
+                        <label class="toggle-item"
+                            title="Gunakan data dummy untuk testing, tanpa memanggil server Cacti.">
+                            <input type="checkbox" id="setDemoMode">
+                            <span class="toggle-switch"></span>
+                            🎮 Demo Mode
                         </label>
                     </div>
                 </div>
@@ -488,7 +515,7 @@
                             <span class="card-icon">📅</span> Tarik Data 24-Jam (Peak)
                         </div>
                     </div>
-                    <div class="form-row">
+                    <div class="form-row" style="align-items: center;">
                         <div class="form-group">
                             <label for="formStartDate">Mulai</label>
                             <input type="date" id="formStartDate">
@@ -497,12 +524,16 @@
                             <label for="formEndDate">Sampai</label>
                             <input type="date" id="formEndDate">
                         </div>
-                        <div class="form-group" style="flex:none;">
-                            <label>&nbsp;</label>
-                            <button class="btn btn-primary" onclick="scrapeFormPeak()" id="btnFormScrape">
-                                🔍 Tarik Data & Preview
-                            </button>
-                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 mt-2">
+                        <button class="btn btn-primary" onclick="scrapeFormPeak()" id="btnFormScrape">
+                            🔍 Tarik Data & Preview
+                        </button>
+                        <label class="toggle-item mb-0" title="Gunakan data dummy untuk testing (sangat cepat).">
+                            <input type="checkbox" id="formDemoMode">
+                            <span class="toggle-switch"></span>
+                            <span style="white-space: nowrap;">🎮 Demo Mode</span>
+                        </label>
                     </div>
                 </div>
 
@@ -761,7 +792,7 @@
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=3.1"></script>
 </body>
 
 </html>

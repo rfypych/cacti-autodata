@@ -411,7 +411,7 @@ code {
     flex: 1;
     padding: 28px 32px 40px;
     min-height: 100vh;
-    max-width: 1200px;
+    /* max-width removed to allow full screen use */
 }
 
 /* ---------- PAGE SECTIONS ---------- */

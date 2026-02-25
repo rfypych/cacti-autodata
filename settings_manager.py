@@ -8,32 +8,35 @@ import os
 from typing import Dict, Any, Optional
 from datetime import datetime
 
+import config
 
 # Path untuk menyimpan settings
-SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "user_settings.json")
+SETTINGS_FILE = os.path.join(config.get_app_dir(), "user_settings.json")
 
 
 DEFAULT_SETTINGS = {
-    # Last used values
+    # Last used values (Session persistence)
     "last_excel_path": "",
     "last_start_date": "",
     "last_end_date": "",
     
     # Cacti configuration
-    "cacti_url": "http://monitor.kabngawi.id/cacti/graph_view.php",
+    "cacti_url": "https://monitor.kabngawi.id/cacti/graph_view.php?action=tree&node=tbranch-169&host_id=101&site_id=-1&host_template_id=-1&hgd=&hyper=true&rfilter=",
     
     # Time format
     "time_format": "dot",  # "dot" = 09.00, "colon" = 09:00
     
-    # Interface to sheet mapping
+    # Interface to sheet mapping (Synced with config.py defaults)
     "interface_mapping": {
-        "ether4-iForte": "iForte",
-        "ether5-Telkom": "Telkom",
-        "ether6-Moratel": "Moratel",
+        "LocalNet": "LocalNet",
+        "iForte": "iForte", 
+        "Telkom": "Telkom",
+        "Moratel": "Moratel",
     },
     
     # Sheet selection (which sheets to process)
     "selected_sheets": {
+        "LocalNet": False, # PARITY: Default off
         "iForte": True,
         "Moratel": True,
         "Telkom": True,
@@ -41,8 +44,25 @@ DEFAULT_SETTINGS = {
     
     # Processing options
     "skip_filled_rows": True,
+    "skip_weekends": True,
+    "skip_holidays": False,
+    "include_metadata": False,
     "dry_run_mode": False,
+    "demo_mode": False,
     "show_browser": True,
+    
+    # Google Form settings (New in v3.1 for EXE readiness)
+    "google_form_url": "https://docs.google.com/forms/d/e/1FAIpQLSeFoeV-XLURb6RfIL20LrUCldthoaeAp0HDLFF5P5TEZlpHKA/viewform",
+    "google_form_entries": {
+        "tanggal": "",
+        "total": "",
+        "moratel": "",
+        "iforte": "",
+        "telkom": "",
+    },
+    
+    # Hybrid GUI-Web settings (v4.0)
+    "web_port": 8181,
     
     # UI preferences
     "language": "id",

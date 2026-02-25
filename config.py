@@ -5,6 +5,21 @@
 # saat di kantor. Ubah nilai-nilai di bawah sesuai kebutuhan.
 # ============================================================
 
+import os
+import sys
+
+def get_app_dir():
+    """Returns the persistent application directory, bypassing PyInstaller's Temp directory."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_resource_dir():
+    """Returns the resource directory, which points to Temp in PyInstaller for static files."""
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.abspath(__file__))
+
 # URL Cacti (sesuaikan dengan URL kantor)
 # Halaman yang menampilkan 4 chart: LocalNet, iForte, Telkom, Moratel
 CACTI_URL = "https://monitor.kabngawi.id/cacti/graph_view.php?action=tree&node=tbranch-169&host_id=101&site_id=-1&host_template_id=-1&hgd=&hyper=true&rfilter="
@@ -125,4 +140,4 @@ SKIP_WEEKENDS = True
 # FITUR METADATA SHEET
 # ============================================================
 # Jika True, sheet Metadata akan ditambahkan ke file Excel
-INCLUDE_METADATA = True
+INCLUDE_METADATA = False
