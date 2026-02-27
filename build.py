@@ -40,6 +40,7 @@ def build_executable():
         "--onefile",
         "--add-data", f"templates{os.pathsep}templates",
         "--add-data", f"static{os.pathsep}static",
+        "--collect-all", "holidays",
         "main.py"  # main.py is the unified entry point
     ]
     

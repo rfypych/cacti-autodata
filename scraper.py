@@ -460,6 +460,11 @@ class CactiScraper:
             
             # Parse CSV Content
             content = resp.text
+            # Deteksi jika Cacti mengembalikan HTML halaman login karena cookie expired
+            if "<html" in content.lower() or "<title>login" in content.lower():
+                self._update_progress(f"Gagal memuat data: Cookie kedaluwarsa (Dialihkan ke Login).", -1)
+                raise ConnectionError("Cookie expired! Jalankan setup_session.py kembali untuk mengambil cookie terbaru.")
+            
             # Strip BOM (Byte Order Mark) jika ada
             if content.startswith('\ufeff'):
                 content = content[1:]
